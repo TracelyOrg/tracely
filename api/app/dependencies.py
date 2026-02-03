@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
-from fastapi import Cookie, Depends, Path
+from fastapi import Cookie, Depends, Header, Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,3 +108,32 @@ def require_role(role: str) -> Callable:
         return current_user
 
     return _check_role
+
+
+async def get_api_key_project(
+    authorization: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """Authenticate via API key from Authorization: Bearer trly_... header.
+
+    Returns (project_id, org_id) for multi-tenant scoping.
+    Used by SDK-facing endpoints (e.g., POST /v1/traces).
+    """
+    if authorization is None:
+        raise UnauthorizedError("Missing Authorization header")
+
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        raise UnauthorizedError("Invalid Authorization header format")
+
+    raw_key = parts[1]
+    if not raw_key.startswith("trly_"):
+        raise UnauthorizedError("Invalid API key format")
+
+    from app.services.api_key_service import validate_api_key
+
+    result = await validate_api_key(db, raw_key)
+    if result is None:
+        raise UnauthorizedError("Invalid or revoked API key")
+
+    return result

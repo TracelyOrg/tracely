@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import settings
-from app.routers import auth, health, organizations
+from app.routers import api_keys, auth, health, organizations, projects, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
     ConflictError,
@@ -30,6 +30,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(organizations.router)
+    app.include_router(projects.router)
+    app.include_router(api_keys.router)
+    app.include_router(stream.router)
 
     @app.exception_handler(ConflictError)
     async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:

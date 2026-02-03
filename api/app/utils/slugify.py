@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.organization import Organization
+from app.models.project import Project
 
 
 def generate_slug(name: str) -> str:
@@ -42,6 +44,37 @@ async def generate_unique_slug(db: AsyncSession, name: str) -> str:
         candidate = f"{base_slug}-{counter}"
         result = await db.execute(
             select(Organization.slug).where(Organization.slug == candidate)
+        )
+        if result.scalar_one_or_none() is None:
+            return candidate
+        counter += 1
+
+
+async def generate_unique_project_slug(
+    db: AsyncSession, name: str, org_id: uuid.UUID
+) -> str:
+    """Generate a slug from *name* that is unique within the given org.
+
+    If the base slug already exists for this org, appends ``-1``, ``-2``, …
+    until a unique value is found.
+    """
+    base_slug = generate_slug(name)
+
+    result = await db.execute(
+        select(Project.slug).where(
+            Project.org_id == org_id, Project.slug == base_slug
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        return base_slug
+
+    counter = 1
+    while True:
+        candidate = f"{base_slug}-{counter}"
+        result = await db.execute(
+            select(Project.slug).where(
+                Project.org_id == org_id, Project.slug == candidate
+            )
         )
         if result.scalar_one_or_none() is None:
             return candidate

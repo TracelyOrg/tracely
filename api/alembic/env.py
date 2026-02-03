@@ -27,6 +27,8 @@ from app.models.user import User  # noqa: E402, F401
 from app.models.refresh_token import RefreshToken  # noqa: E402, F401
 from app.models.organization import Organization  # noqa: E402, F401
 from app.models.org_member import OrgMember  # noqa: E402, F401
+from app.models.project import Project  # noqa: E402, F401
+from app.models.api_key import ApiKey  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

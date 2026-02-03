@@ -117,3 +117,16 @@ async def logout(
 async def me(current_user: User = Depends(get_current_user)) -> dict:
     user_out = UserOut.model_validate(current_user)
     return success(AuthResponse(user=user_out).model_dump())
+
+
+@router.post("/onboarding-complete")
+async def complete_onboarding(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    current_user.onboarding_completed = True
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    user_out = UserOut.model_validate(current_user)
+    return success(AuthResponse(user=user_out).model_dump())

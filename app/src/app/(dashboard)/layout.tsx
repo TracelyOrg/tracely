@@ -11,6 +11,7 @@ interface AuthUser {
     id: string;
     email: string;
     full_name: string | null;
+    onboarding_completed: boolean;
     created_at: string;
   };
 }
@@ -19,6 +20,14 @@ interface OrgItem {
   id: string;
   name: string;
   slug: string;
+  created_at: string;
+}
+
+interface ProjectItem {
+  id: string;
+  name: string;
+  slug: string;
+  org_id: string;
   created_at: string;
 }
 
@@ -32,19 +41,22 @@ export default function DashboardLayout({
   const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(true);
 
-  const onOnboarding = pathname.startsWith("/onboarding");
+  const onOnboarding =
+    pathname.startsWith("/onboarding") || pathname.includes("/onboarding");
 
-  // Extract org slug from URL — first path segment (e.g. /my-org/...)
+  // Extract org and project slugs from URL (e.g. /my-org/my-project/...)
   const segments = pathname.split("/").filter(Boolean);
   const currentOrgSlug =
     !onOnboarding && segments.length > 0 ? segments[0] : undefined;
+  const currentProjectSlug =
+    !onOnboarding && segments.length > 1 ? segments[1] : undefined;
 
   useEffect(() => {
     let cancelled = false;
 
     async function checkAuth() {
       try {
-        await apiFetch<DataEnvelope<AuthUser>>("/api/auth/me");
+        const authRes = await apiFetch<DataEnvelope<AuthUser>>("/api/auth/me");
         if (cancelled) return;
 
         const orgsRes = await apiFetch<DataEnvelope<OrgItem[]>>("/api/orgs");
@@ -54,6 +66,30 @@ export default function DashboardLayout({
 
         if (orgsRes.data.length === 0 && !onOnboarding) {
           router.replace("/onboarding/create-org");
+          return;
+        }
+
+        // Redirect to onboarding wizard if not completed (Task 8.4)
+        if (
+          !authRes.data.user.onboarding_completed &&
+          orgsRes.data.length > 0 &&
+          !onOnboarding
+        ) {
+          const firstOrg = orgsRes.data[0];
+          try {
+            const projRes = await apiFetch<DataEnvelope<ProjectItem[]>>(
+              `/api/orgs/${firstOrg.slug}/projects`
+            );
+            if (cancelled) return;
+            if (projRes.data.length > 0) {
+              const firstProject = projRes.data[0];
+              router.replace(
+                `/${firstOrg.slug}/${firstProject.slug}/onboarding`
+              );
+            }
+          } catch {
+            // Non-blocking — if projects fail to load, don't redirect
+          }
         }
       } catch {
         if (!cancelled) router.replace("/login");
@@ -82,7 +118,7 @@ export default function DashboardLayout({
     <div className="min-h-screen">
       {!onOnboarding && (
         <header className="flex h-14 items-center border-b px-4">
-          <BreadcrumbPicker currentOrgSlug={currentOrgSlug} />
+          <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
         </header>
       )}
       <main>{children}</main>
