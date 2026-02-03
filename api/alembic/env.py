@@ -24,6 +24,7 @@ if config.config_file_name is not None:
 # Each new model file should be imported here.
 from app.db.base import Base  # noqa: E402
 from app.models.user import User  # noqa: E402, F401
+from app.models.refresh_token import RefreshToken  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

@@ -15,9 +15,25 @@ export class ApiError extends Error {
   }
 }
 
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _retried = false
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
@@ -29,6 +45,25 @@ export async function apiFetch<T>(
       ...options.headers,
     },
   });
+
+  if (res.status === 401 && !_retried && !path.includes("/auth/refresh")) {
+    // Deduplicate concurrent refresh attempts
+    if (!refreshPromise) {
+      refreshPromise = tryRefresh().finally(() => {
+        refreshPromise = null;
+      });
+    }
+
+    const refreshed = await refreshPromise;
+    if (refreshed) {
+      return apiFetch<T>(path, options, true);
+    }
+
+    // Refresh failed — redirect to login
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+  }
 
   const body = await res.json();
 
