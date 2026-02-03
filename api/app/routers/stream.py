@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
@@ -15,11 +16,14 @@ from app.dependencies import get_current_user
 from app.models.org_member import OrgMember
 from app.models.project import Project
 from app.models.user import User
+from app.services.stream_manager import connection_manager
 from app.utils.exceptions import ForbiddenError, NotFoundError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["stream"])
 
-HEARTBEAT_INTERVAL_S = 30
+HEARTBEAT_INTERVAL_S = 15
 
 
 async def _verify_project_access(
@@ -51,20 +55,33 @@ async def _verify_project_access(
     return project
 
 
-async def _heartbeat_generator(
+async def _event_generator(
     project_id: uuid.UUID,
+    queue: asyncio.Queue[dict[str, str]],
 ) -> AsyncGenerator[dict[str, str], None]:
-    """Generate heartbeat events every 30s.
+    """Yield span events from the connection queue and heartbeats on a timer.
 
-    NOTE: This is a stub for Story 1.6. Full span broadcasting
-    will be implemented in Epic 2 (Story 2.8).
+    Merges two sources:
+    - Span events pushed into the queue by the ConnectionManager
+    - Heartbeat events every HEARTBEAT_INTERVAL_S seconds
+
+    On generator close (client disconnect), the queue is unregistered.
     """
-    while True:
-        yield {
-            "event": "heartbeat",
-            "data": f'{{"timestamp":"{datetime.now(timezone.utc).isoformat()}"}}',
-        }
-        await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    queue.get(), timeout=HEARTBEAT_INTERVAL_S
+                )
+                yield event
+            except asyncio.TimeoutError:
+                yield {
+                    "event": "heartbeat",
+                    "data": f'{{"timestamp":"{datetime.now(timezone.utc).isoformat()}"}}',
+                }
+    finally:
+        connection_manager.disconnect(project_id, queue)
+        logger.debug("SSE client disconnected from project %s", project_id)
 
 
 @router.get("/api/stream/{project_id}")
@@ -77,12 +94,13 @@ async def stream_events(
 
     Authenticates via cookie (dashboard user) and verifies
     the user has access to the project's organization.
-    Currently sends heartbeats only — span broadcasting
-    is implemented in Epic 2 Story 2.8.
+    Streams span events in real-time and heartbeats every 15s.
     """
     await _verify_project_access(project_id, current_user, db)
 
+    queue = connection_manager.connect(project_id)
+
     return EventSourceResponse(
-        _heartbeat_generator(project_id),
+        _event_generator(project_id, queue),
         media_type="text/event-stream",
     )

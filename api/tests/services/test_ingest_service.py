@@ -17,6 +17,7 @@ from opentelemetry.proto.trace.v1.trace_pb2 import (
 )
 
 from app.services.ingest_service import SPANS_COLUMNS, ingest_traces
+from app.services.stream_manager import connection_manager
 
 
 def _make_kv(key: str, value: str) -> KeyValue:
@@ -181,3 +182,138 @@ async def test_ingest_traces_column_ordering():
     assert call_args[1]["column_names"] == SPANS_COLUMNS
     row = call_args[0][1][0]
     assert len(row) == len(SPANS_COLUMNS)
+
+
+# ── SSE broadcast integration (Story 2.8) ────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _clear_channels():
+    connection_manager._channels.clear()
+    yield
+    connection_manager._channels.clear()
+
+
+@pytest.mark.asyncio
+async def test_ingest_traces_broadcasts_to_sse_clients():
+    """After ClickHouse insert, spans are broadcast to SSE clients (AC2)."""
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    payload = _build_valid_payload()
+
+    # Connect an SSE client
+    queue = connection_manager.connect(project_id)
+
+    mock_client = MagicMock()
+    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+        await ingest_traces(payload, org_id, project_id)
+
+    # Queue should have received a span event
+    assert not queue.empty()
+    event = queue.get_nowait()
+    assert event["event"] == "span"
+    assert "trace_id" in event["data"]
+
+
+@pytest.mark.asyncio
+async def test_ingest_traces_broadcast_event_format():
+    """Broadcast event uses 'event: span' and JSON data (AC2)."""
+    import json
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+    payload = _build_valid_payload()
+
+    queue = connection_manager.connect(project_id)
+
+    mock_client = MagicMock()
+    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+        await ingest_traces(payload, org_id, project_id)
+
+    event = queue.get_nowait()
+    assert event["event"] == "span"
+
+    data = json.loads(event["data"])
+    assert data["trace_id"] == "0af7651916cd43dd8448eb211c80319c"
+    assert data["span_id"] == "b7ad6b7169203331"
+    assert data["span_name"] == "GET /health"
+    assert data["service_name"] == "my-service"
+    assert data["http_method"] == "GET"
+    assert data["http_route"] == "/health"
+    assert data["http_status_code"] == 200
+    assert data["status_code"] == "OK"
+
+
+@pytest.mark.asyncio
+async def test_ingest_traces_broadcasts_multiple_spans():
+    """Multiple ingested spans → multiple broadcast events."""
+    span1 = Span(
+        trace_id=bytes.fromhex("0af7651916cd43dd8448eb211c80319c"),
+        span_id=bytes.fromhex("b7ad6b7169203331"),
+        name="span-1",
+        kind=2,
+        start_time_unix_nano=1_700_000_000_000_000_000,
+        end_time_unix_nano=1_700_000_000_050_000_000,
+        status=Status(code=1),
+    )
+    span2 = Span(
+        trace_id=bytes.fromhex("0af7651916cd43dd8448eb211c80319c"),
+        span_id=bytes.fromhex("1234567890abcdef"),
+        name="span-2",
+        kind=1,
+        start_time_unix_nano=1_700_000_000_000_000_000,
+        end_time_unix_nano=1_700_000_000_010_000_000,
+        status=Status(code=0),
+    )
+    req = ExportTraceServiceRequest(
+        resource_spans=[
+            ResourceSpans(
+                resource=Resource(
+                    attributes=[_make_kv("service.name", "svc")]
+                ),
+                scope_spans=[ScopeSpans(spans=[span1, span2])],
+            )
+        ]
+    )
+    payload = req.SerializeToString()
+    project_id = uuid.uuid4()
+    queue = connection_manager.connect(project_id)
+
+    mock_client = MagicMock()
+    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+        await ingest_traces(payload, uuid.uuid4(), project_id)
+
+    assert queue.qsize() == 2
+
+
+@pytest.mark.asyncio
+async def test_ingest_traces_no_broadcast_without_listeners():
+    """Broadcast with no SSE clients does not error."""
+    payload = _build_valid_payload()
+    mock_client = MagicMock()
+
+    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+        count = await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
+
+    assert count == 1  # Ingestion still succeeds
+
+
+@pytest.mark.asyncio
+async def test_ingest_traces_broadcast_does_not_block_on_failure():
+    """Broadcasting failure (e.g. full queue) does not block ingestion."""
+    project_id = uuid.uuid4()
+    queue = connection_manager.connect(project_id)
+
+    # Fill the queue
+    for i in range(queue.maxsize):
+        queue.put_nowait({"event": "filler", "data": f"{i}"})
+
+    payload = _build_valid_payload()
+    mock_client = MagicMock()
+
+    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+        count = await ingest_traces(payload, uuid.uuid4(), project_id)
+
+    # Ingestion still returns normally
+    assert count == 1
+    mock_client.insert.assert_called_once()

@@ -6,6 +6,8 @@ import uuid
 from typing import Any
 
 from app.db.clickhouse import get_clickhouse_client
+from app.schemas.stream import build_span_summary
+from app.services.stream_manager import connection_manager
 from app.utils.otlp import extract_spans, parse_otlp_request
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,16 @@ async def ingest_traces(
         rows,
         column_names=SPANS_COLUMNS,
     )
+
+    # Broadcast span summaries to connected SSE clients (fire-and-forget)
+    if connection_manager.connection_count(project_id) > 0:
+        for span in spans:
+            summary = build_span_summary(span)
+            event = {
+                "event": "span",
+                "data": summary.model_dump_json(),
+            }
+            connection_manager.broadcast(project_id, event)
 
     logger.info(
         "Ingested %d spans for project %s (org %s), payload %d bytes",
