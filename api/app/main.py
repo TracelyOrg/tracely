@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
-from app.routers import api_keys, auth, health, ingest, organizations, projects, stream
+from app.routers import api_keys, auth, health, ingest, organizations, projects, spans, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
     ConflictError,
@@ -46,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(organizations.router)
     app.include_router(projects.router)
     app.include_router(api_keys.router)
+    app.include_router(spans.router)
     app.include_router(stream.router)
     app.include_router(ingest.router)
 

@@ -6,14 +6,21 @@ const MAX_BUFFER_SIZE = 5000;
 interface LiveStreamState {
   spans: SpanEvent[];
   isAtBottom: boolean;
+  isLoadingHistory: boolean;
+  hasMoreHistory: boolean;
   addSpan: (span: SpanEvent) => void;
+  prependSpans: (older: SpanEvent[]) => void;
   setIsAtBottom: (value: boolean) => void;
+  setLoadingHistory: (value: boolean) => void;
+  setHasMoreHistory: (value: boolean) => void;
   reset: () => void;
 }
 
 export const useLiveStreamStore = create<LiveStreamState>((set) => ({
   spans: [],
   isAtBottom: true,
+  isLoadingHistory: false,
+  hasMoreHistory: true,
 
   addSpan: (span) =>
     set((state) => {
@@ -40,7 +47,21 @@ export const useLiveStreamStore = create<LiveStreamState>((set) => ({
       return { spans: nextSpans };
     }),
 
-  setIsAtBottom: (value) => set({ isAtBottom: value }),
+  prependSpans: (older) =>
+    set((state) => {
+      const existingIds = new Set(state.spans.map((s) => s.span_id));
+      const unique = older.filter((s) => !existingIds.has(s.span_id));
+      return { spans: [...unique, ...state.spans] };
+    }),
 
-  reset: () => set({ spans: [], isAtBottom: true }),
+  setIsAtBottom: (value) => set({ isAtBottom: value }),
+  setLoadingHistory: (value) => set({ isLoadingHistory: value }),
+  setHasMoreHistory: (value) => set({ hasMoreHistory: value }),
+
+  reset: () => set({
+    spans: [],
+    isAtBottom: true,
+    isLoadingHistory: false,
+    hasMoreHistory: true,
+  }),
 }));

@@ -99,4 +99,67 @@ describe("liveStreamStore", () => {
   it("isAtBottom defaults to true (live position)", () => {
     expect(useLiveStreamStore.getState().isAtBottom).toBe(true);
   });
+
+  // --- History loading (Story 3.2) ---
+
+  it("prependSpans prepends older spans to the beginning", () => {
+    useLiveStreamStore.getState().addSpan(makeSpan({ span_id: "live-1" }));
+
+    const olderSpans = [
+      makeSpan({ span_id: "old-1", start_time: "2026-02-03T09:00:00Z" }),
+      makeSpan({ span_id: "old-2", start_time: "2026-02-03T09:01:00Z" }),
+    ];
+    useLiveStreamStore.getState().prependSpans(olderSpans);
+
+    const { spans } = useLiveStreamStore.getState();
+    expect(spans).toHaveLength(3);
+    expect(spans[0].span_id).toBe("old-1");
+    expect(spans[1].span_id).toBe("old-2");
+    expect(spans[2].span_id).toBe("live-1");
+  });
+
+  it("isLoadingHistory defaults to false", () => {
+    expect(useLiveStreamStore.getState().isLoadingHistory).toBe(false);
+  });
+
+  it("setLoadingHistory updates loading state", () => {
+    useLiveStreamStore.getState().setLoadingHistory(true);
+    expect(useLiveStreamStore.getState().isLoadingHistory).toBe(true);
+
+    useLiveStreamStore.getState().setLoadingHistory(false);
+    expect(useLiveStreamStore.getState().isLoadingHistory).toBe(false);
+  });
+
+  it("hasMoreHistory defaults to true", () => {
+    expect(useLiveStreamStore.getState().hasMoreHistory).toBe(true);
+  });
+
+  it("setHasMoreHistory updates flag", () => {
+    useLiveStreamStore.getState().setHasMoreHistory(false);
+    expect(useLiveStreamStore.getState().hasMoreHistory).toBe(false);
+  });
+
+  it("prependSpans does not duplicate spans with same span_id", () => {
+    useLiveStreamStore.getState().addSpan(makeSpan({ span_id: "existing" }));
+
+    const olderSpans = [
+      makeSpan({ span_id: "existing" }),
+      makeSpan({ span_id: "new-old" }),
+    ];
+    useLiveStreamStore.getState().prependSpans(olderSpans);
+
+    const { spans } = useLiveStreamStore.getState();
+    expect(spans).toHaveLength(2);
+    expect(spans[0].span_id).toBe("new-old");
+    expect(spans[1].span_id).toBe("existing");
+  });
+
+  it("reset clears history state too", () => {
+    useLiveStreamStore.getState().setLoadingHistory(true);
+    useLiveStreamStore.getState().setHasMoreHistory(false);
+    useLiveStreamStore.getState().reset();
+
+    expect(useLiveStreamStore.getState().isLoadingHistory).toBe(false);
+    expect(useLiveStreamStore.getState().hasMoreHistory).toBe(true);
+  });
 });

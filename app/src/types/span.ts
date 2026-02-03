@@ -13,3 +13,16 @@ export interface SpanEvent {
   http_route: string;
   http_status_code: number;
 }
+
+/** Full span detail returned by GET /spans/{span_id}. */
+export interface SpanDetail extends SpanEvent {
+  framework: string;
+  environment: string;
+  end_time: string;
+  status_message: string;
+  request_body: string;
+  response_body: string;
+  request_headers: Record<string, string>;
+  response_headers: Record<string, string>;
+  attributes: Record<string, string>;
+}

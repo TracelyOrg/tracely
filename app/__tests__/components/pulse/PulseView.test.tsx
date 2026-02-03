@@ -48,6 +48,13 @@ jest.mock("framer-motion", () => ({
       children: React.ReactNode;
       [key: string]: unknown;
     }) => <div {...props}>{children}</div>,
+    button: ({
+      children,
+      ...props
+    }: {
+      children: React.ReactNode;
+      [key: string]: unknown;
+    }) => <button {...props}>{children}</button>,
   },
   AnimatePresence: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -172,5 +179,90 @@ describe("PulseView Page", () => {
         onSpan: expect.any(Function),
       })
     );
+  });
+
+  // --- Story 3.2: Back to Live button ---
+
+  it("shows 'Back to Live' button when scrolled away from bottom with spans (AC2, UX17)", async () => {
+    mockApiFetch.mockResolvedValue({
+      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+    });
+    mockUseEventStream.mockReturnValue({
+      status: "connected",
+      firstEventReceived: true,
+    });
+
+    // Pre-populate store with spans and set isAtBottom = false
+    useLiveStreamStore.getState().addSpan({
+      trace_id: "t1",
+      span_id: "s1",
+      parent_span_id: "",
+      span_name: "GET /api/test",
+      span_type: "span",
+      service_name: "api",
+      kind: "SERVER",
+      start_time: "2026-02-03T10:00:00Z",
+      duration_ms: 42,
+      status_code: "OK",
+      http_method: "GET",
+      http_route: "/api/test",
+      http_status_code: 200,
+    });
+    useLiveStreamStore.getState().setIsAtBottom(false);
+
+    render(<LivePage />);
+
+    await screen.findByText("Pulse View");
+    expect(screen.getByText("Back to Live")).toBeInTheDocument();
+  });
+
+  it("does NOT show 'Back to Live' button when at bottom (AC3)", async () => {
+    mockApiFetch.mockResolvedValue({
+      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+    });
+    mockUseEventStream.mockReturnValue({
+      status: "connected",
+      firstEventReceived: true,
+    });
+
+    // Pre-populate store with spans — isAtBottom stays true (default)
+    useLiveStreamStore.getState().addSpan({
+      trace_id: "t1",
+      span_id: "s1",
+      parent_span_id: "",
+      span_name: "GET /api/test",
+      span_type: "span",
+      service_name: "api",
+      kind: "SERVER",
+      start_time: "2026-02-03T10:00:00Z",
+      duration_ms: 42,
+      status_code: "OK",
+      http_method: "GET",
+      http_route: "/api/test",
+      http_status_code: 200,
+    });
+
+    render(<LivePage />);
+
+    await screen.findByText("Pulse View");
+    expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();
+  });
+
+  it("does NOT show 'Back to Live' button when no spans", async () => {
+    mockApiFetch.mockResolvedValue({
+      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+    });
+    mockUseEventStream.mockReturnValue({
+      status: "connected",
+      firstEventReceived: false,
+    });
+
+    // isAtBottom = false but no spans
+    useLiveStreamStore.getState().setIsAtBottom(false);
+
+    render(<LivePage />);
+
+    await screen.findByText("No requests yet");
+    expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();
   });
 });

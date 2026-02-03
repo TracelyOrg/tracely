@@ -28,18 +28,27 @@ function StatusIcon({ code }: { code: number }) {
 
 interface StreamRowProps {
   span: SpanEvent;
+  isSelected?: boolean;
+  onClick?: () => void;
 }
 
-export const StreamRow = memo(function StreamRow({ span }: StreamRowProps) {
+export const StreamRow = memo(function StreamRow({ span, isSelected, onClick }: StreamRowProps) {
   const isPending = span.span_type === "pending_span";
   const route = span.http_route || span.span_name;
   const methodColor = METHOD_COLORS[span.http_method] ?? "bg-muted text-muted-foreground";
 
   return (
     <div
+      role="row"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && onClick) onClick();
+      }}
       className={cn(
-        "flex items-center gap-3 px-4 py-2 text-sm font-mono border-b border-border/50",
-        isPending && "opacity-70"
+        "flex items-center gap-3 px-4 py-2 text-sm font-mono border-b border-border/50 cursor-pointer transition-colors hover:bg-accent/50",
+        isPending && "opacity-70",
+        isSelected && "bg-accent"
       )}
     >
       {/* HTTP Method Badge */}
