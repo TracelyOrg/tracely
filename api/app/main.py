@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import settings
-from app.routers import api_keys, auth, health, organizations, projects, stream
+from app.db.clickhouse import close_clickhouse, init_clickhouse
+from app.routers import api_keys, auth, health, ingest, organizations, projects, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
     ConflictError,
@@ -15,9 +20,18 @@ from app.utils.exceptions import (
     UnauthorizedError,
 )
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    await init_clickhouse()
+    yield
+    await close_clickhouse()
+
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="TRACELY API", version="0.1.0")
+    app = FastAPI(title="TRACELY API", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -33,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(projects.router)
     app.include_router(api_keys.router)
     app.include_router(stream.router)
+    app.include_router(ingest.router)
 
     @app.exception_handler(ConflictError)
     async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:
