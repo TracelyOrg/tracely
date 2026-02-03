@@ -23,6 +23,7 @@ if config.config_file_name is not None:
 # Import all models so Alembic can detect them for autogenerate.
 # Each new model file should be imported here.
 from app.db.base import Base  # noqa: E402
+from app.models.user import User  # noqa: E402, F401
 
 target_metadata = Base.metadata
 
