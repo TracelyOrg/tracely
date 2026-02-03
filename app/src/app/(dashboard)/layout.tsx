@@ -122,7 +122,7 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen">
       {!onOnboarding && (
-        <header className="flex h-14 items-center border-b px-4">
+        <header className="flex h-12 items-center border-b px-4">
           <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
         </header>
       )}
