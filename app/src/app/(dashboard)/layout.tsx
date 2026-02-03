@@ -86,6 +86,11 @@ export default function DashboardLayout({
               router.replace(
                 `/${firstOrg.slug}/${firstProject.slug}/onboarding`
               );
+            } else {
+              // Org exists but no projects — redirect to project creation
+              router.replace(
+                `/onboarding/create-project?org=${firstOrg.slug}`
+              );
             }
           } catch {
             // Non-blocking — if projects fail to load, don't redirect

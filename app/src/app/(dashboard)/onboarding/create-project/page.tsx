@@ -1,27 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 
-interface OrgResponse {
-  organization: {
-    id: string;
-    name: string;
-    slug: string;
-    created_at: string;
-  };
-  member: {
-    id: string;
-    user_id: string;
-    role: string;
-    created_at: string;
-  };
+interface ProjectResponse {
+  id: string;
+  name: string;
+  slug: string;
+  org_id: string;
+  created_at: string;
 }
 
-export default function CreateOrgPage() {
+export default function CreateProjectPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org");
+
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -29,17 +25,22 @@ export default function CreateOrgPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!orgSlug) return;
+
     setError(null);
     setFieldErrors({});
     setLoading(true);
 
     try {
-      const res = await apiFetch<DataEnvelope<OrgResponse>>("/api/orgs", {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      });
-      const slug = res.data.organization.slug;
-      router.push(`/onboarding/create-project?org=${slug}`);
+      const res = await apiFetch<DataEnvelope<ProjectResponse>>(
+        `/api/orgs/${orgSlug}/projects`,
+        {
+          method: "POST",
+          body: JSON.stringify({ name }),
+        }
+      );
+      const projectSlug = res.data.slug;
+      router.push(`/${orgSlug}/${projectSlug}/onboarding`);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.details) {
@@ -59,16 +60,25 @@ export default function CreateOrgPage() {
     }
   }
 
+  if (!orgSlug) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">
+          Missing organization. Please go back and create an organization first.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-md space-y-6 px-4">
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-bold tracking-tight">
-            Create your organization
+            Create your first project
           </h1>
           <p className="text-sm text-muted-foreground">
-            An organization is your workspace to manage projects and team
-            members.
+            A project represents one application or service you want to monitor.
           </p>
         </div>
 
@@ -81,7 +91,7 @@ export default function CreateOrgPage() {
 
           <div className="space-y-2">
             <label htmlFor="name" className="text-sm font-medium">
-              Organization name
+              Project name
             </label>
             <input
               id="name"
@@ -91,7 +101,7 @@ export default function CreateOrgPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="My Company"
+              placeholder="My API"
             />
             {fieldErrors.name && (
               <p className="text-xs text-destructive">{fieldErrors.name}</p>
@@ -103,7 +113,7 @@ export default function CreateOrgPage() {
             disabled={loading || name.trim().length === 0}
             className="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground ring-offset-background transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
           >
-            {loading ? "Creating..." : "Create organization"}
+            {loading ? "Creating..." : "Create project"}
           </button>
         </form>
       </div>
