@@ -12,8 +12,9 @@ import {
   Terminal,
   Code,
   Wifi,
+  RefreshCw,
 } from "lucide-react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import { Button } from "@/components/ui/button";
 import IntegrationWidget from "@/components/onboarding/IntegrationWidget";
@@ -54,8 +55,7 @@ const STEP_VARIANTS = {
 
 const STEPS = [
   { label: "Install SDK", icon: Terminal },
-  { label: "Add to App", icon: Code },
-  { label: "Verify Connection", icon: Wifi },
+  { label: "Check Connection", icon: Wifi },
 ];
 
 // --- Helpers ---
@@ -88,13 +88,13 @@ function CopyButton({ text }: { text: string }) {
 function CodeBlock({ code, language }: { code: string; language?: string }) {
   return (
     <div className="rounded-lg border bg-muted/50">
-      <div className="flex items-center justify-between border-b px-4 py-2">
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-xs text-muted-foreground font-mono">
           {language || "shell"}
         </span>
         <CopyButton text={code} />
       </div>
-      <pre className="overflow-x-auto p-4">
+      <pre className="overflow-x-auto p-3">
         <code className="text-sm font-mono">{code}</code>
       </pre>
     </div>
@@ -150,129 +150,71 @@ function StepperNav({ currentStep }: { currentStep: number }) {
   );
 }
 
-// --- Step 1: Install SDK (AC #2) ---
+// --- Step 1: Install SDK (same widget as /live empty state) ---
 
-function InstallStep() {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Install the Tracely SDK</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Add the Tracely SDK to your Python project using pip.
-        </p>
-      </div>
-      <CodeBlock code="pip install tracely" language="shell" />
-      <p className="text-sm text-muted-foreground">
-        The SDK has zero runtime dependencies beyond{" "}
-        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-          httpx
-        </code>
-        .
-      </p>
-    </div>
-  );
-}
-
-// --- Step 2: Configure (AC #3) ---
-
-function ConfigureStep({
-  apiKey,
-  existingKeys,
-  generating,
-  error,
-  onGenerate,
+function InstallStep({
+  fullKey,
+  keyPrefix,
+  regenerating,
+  onRegenerate,
 }: {
-  apiKey: string | null;
-  existingKeys: ApiKeyItem[];
-  generating: boolean;
-  error: string | null;
-  onGenerate: () => void;
+  fullKey: string | null;
+  keyPrefix: string | null;
+  regenerating: boolean;
+  onRegenerate: () => void;
 }) {
-  const snippet = `import tracely
+  const hasFullKey = fullKey !== null;
+  const displayKey = fullKey ?? (keyPrefix ? `${keyPrefix}...` : "your_api_key_here");
+  const installSnippet = `pip install tracely-sdk
+export TRACELY_API_KEY="${displayKey}"`;
 
-# Set your API key as an environment variable:
-# export TRACELY_API_KEY="${apiKey || "your_api_key_here"}"
+  const configSnippet = `import tracely
 
 tracely.init()  # reads TRACELY_API_KEY from env`;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Add Tracely to your app</h2>
+    <div className="space-y-5">
+      <div className="text-center">
+        <h2 className="text-lg font-semibold">Get started</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Initialize the SDK in your application entry point.
+          Install the SDK and send your first event to see it in real time.
         </p>
       </div>
 
-      {!apiKey && existingKeys.length === 0 && (
-        <div className="rounded-lg border border-dashed p-4">
-          {generating ? (
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">
-                Generating your API key...
-              </p>
-            </div>
-          ) : error ? (
-            <div>
-              <p className="text-sm text-destructive">{error}</p>
-              <Button
-                onClick={onGenerate}
-                className="mt-3"
-                size="sm"
-                variant="outline"
-              >
-                Retry
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              <p className="text-sm text-muted-foreground">
-                Preparing your API key...
-              </p>
-            </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Terminal className="size-4 text-muted-foreground" />
+            1. Install &amp; configure
+          </div>
+          {!hasFullKey && keyPrefix && (
+            <button
+              onClick={onRegenerate}
+              disabled={regenerating}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+            >
+              <RefreshCw className={`size-3 ${regenerating ? "animate-spin" : ""}`} />
+              {regenerating ? "Generating..." : "Regenerate key"}
+            </button>
           )}
         </div>
-      )}
+        <CodeBlock code={installSnippet} language="shell" />
+      </div>
 
-      {apiKey && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Your API Key (shown once):</p>
-            <CopyButton text={apiKey} />
-          </div>
-          <code className="mt-2 block break-all rounded bg-muted p-2 font-mono text-sm">
-            {apiKey}
-          </code>
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Code className="size-4 text-muted-foreground" />
+          2. Add to your app
         </div>
-      )}
-
-      {!apiKey && existingKeys.length > 0 && (
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <p className="text-sm">
-            API key already configured:{" "}
-            <code className="font-mono text-xs">{existingKeys[0].prefix}...</code>
-          </p>
-        </div>
-      )}
-
-      <CodeBlock code={snippet} language="python" />
-
-      <p className="text-sm text-muted-foreground">
-        Set the{" "}
-        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
-          TRACELY_API_KEY
-        </code>{" "}
-        environment variable, then initialize the SDK.
-      </p>
+        <CodeBlock code={configSnippet} language="python" />
+      </div>
     </div>
   );
 }
 
-// --- Step 3: Verify (AC #4-5, uses IntegrationWidget) ---
+// --- Step 2: Check Connection (uses IntegrationWidget) ---
 
-function VerifyStep({
+function CheckConnectionStep({
   connected,
   onContinue,
   continuing,
@@ -284,7 +226,7 @@ function VerifyStep({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Verify your connection</h2>
+        <h2 className="text-lg font-semibold">Check your connection</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Run your application and we&apos;ll detect the first event.
         </p>
@@ -311,10 +253,9 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { orgSlug, projectSlug } = params;
   const [currentStep, setCurrentStep] = useState(0);
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [existingKeys, setExistingKeys] = useState<ApiKeyItem[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fullKey, setFullKey] = useState<string | null>(null);
+  const [keyPrefix, setKeyPrefix] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
 
   const basePath = `/api/orgs/${orgSlug}/projects/${projectSlug}/api-keys`;
@@ -334,60 +275,51 @@ export default function OnboardingPage() {
     loadProject();
   }, [orgSlug, projectSlug]);
 
-  const loadKeys = useCallback(async () => {
-    try {
-      const res = await apiFetch<DataEnvelope<ApiKeyItem[]>>(basePath);
-      setExistingKeys(res.data);
-      return res.data;
-    } catch {
-      // Non-blocking — wizard can still proceed
-      return null;
-    }
-  }, [basePath]);
-
+  // Generate a new key and display the full value
   const generateKey = useCallback(async () => {
-    setGenerating(true);
-    setError(null);
+    setRegenerating(true);
     try {
       const res = await apiFetch<DataEnvelope<ApiKeyCreatedResponse>>(
         basePath,
-        {
-          method: "POST",
-          body: JSON.stringify({ name: "Onboarding" }),
-        }
+        { method: "POST", body: JSON.stringify({ name: "Onboarding" }) }
       );
-      setApiKey(res.data.key);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Failed to generate API key");
-      }
+      setFullKey(res.data.key);
+      setKeyPrefix(res.data.prefix);
+    } catch {
+      // Non-blocking
     } finally {
-      setGenerating(false);
+      setRegenerating(false);
     }
   }, [basePath]);
 
-  // Auto-generate API key on mount if none exist
-  const autoGeneratedRef = useRef(false);
+  // On mount: if no keys → auto-generate; if keys exist → show prefix
+  const initRef = useRef(false);
   useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+
     async function init() {
-      const keys = await loadKeys();
-      if (keys && keys.length === 0 && !autoGeneratedRef.current) {
-        autoGeneratedRef.current = true;
-        generateKey();
+      try {
+        const res = await apiFetch<DataEnvelope<ApiKeyItem[]>>(basePath);
+        if (res.data.length > 0) {
+          setKeyPrefix(res.data[0].prefix);
+        } else {
+          generateKey();
+        }
+      } catch {
+        // Non-blocking
       }
     }
     init();
-  }, [loadKeys, generateKey]);
+  }, [basePath, generateKey]);
 
-  // SSE connection — only active on verify step when we have a project_id
+  // SSE connection — active on check connection step when we have a project_id
   const { firstEventReceived } = useEventStream({
     projectId: projectId ?? "",
-    enabled: currentStep === 2 && projectId !== null,
+    enabled: currentStep === 1 && projectId !== null,
   });
 
-  // AC #8: success toast on first event
+  // Success toast on first event
   const toastFiredRef = useRef(false);
   useEffect(() => {
     if (firstEventReceived && !toastFiredRef.current) {
@@ -441,18 +373,16 @@ export default function OnboardingPage() {
               exit="exit"
               transition={TRANSITION_NORMAL}
             >
-              {currentStep === 0 && <InstallStep />}
-              {currentStep === 1 && (
-                <ConfigureStep
-                  apiKey={apiKey}
-                  existingKeys={existingKeys}
-                  generating={generating}
-                  error={error}
-                  onGenerate={generateKey}
+              {currentStep === 0 && (
+                <InstallStep
+                  fullKey={fullKey}
+                  keyPrefix={keyPrefix}
+                  regenerating={regenerating}
+                  onRegenerate={generateKey}
                 />
               )}
-              {currentStep === 2 && (
-                <VerifyStep
+              {currentStep === 1 && (
+                <CheckConnectionStep
                   connected={firstEventReceived}
                   onContinue={handleContinueToLive}
                   continuing={continuing}
@@ -482,9 +412,9 @@ export default function OnboardingPage() {
             Skip setup
           </Button>
 
-          {currentStep < 2 ? (
+          {currentStep < 1 ? (
             <Button
-              onClick={() => setCurrentStep((s) => Math.min(2, s + 1))}
+              onClick={() => setCurrentStep((s) => Math.min(1, s + 1))}
             >
               Next
               <ChevronRight className="ml-1 size-4" />
