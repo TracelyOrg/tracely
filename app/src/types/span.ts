@@ -2,7 +2,7 @@
 
 export type StatusCodeGroup = "2xx" | "3xx" | "4xx" | "5xx";
 
-export type TimeRangePreset = "15m" | "1h" | "6h" | "24h" | "custom";
+export type TimeRangePreset = "5m" | "15m" | "1h" | "6h" | "24h" | "custom";
 
 export interface TimeRange {
   preset: TimeRangePreset;
@@ -23,7 +23,7 @@ export const DEFAULT_FILTERS: StreamFilters = {
   service: null,
   statusGroups: [],
   endpointSearch: "",
-  timeRange: { preset: "15m" },
+  timeRange: { preset: "5m" },
   environment: null,
 };
 

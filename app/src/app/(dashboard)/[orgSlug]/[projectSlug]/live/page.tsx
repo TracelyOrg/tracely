@@ -13,7 +13,6 @@ import { useSpanDetail } from "@/hooks/useSpanDetail";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
 import { matchesFilters } from "@/lib/filterUtils";
-import { cn } from "@/lib/utils";
 import { StreamRow } from "@/components/pulse/StreamRow";
 import { ChildSpanRow } from "@/components/pulse/ChildSpanRow";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
@@ -21,7 +20,7 @@ import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 type DisplayItem =
   | { type: "root"; span: SpanEvent; childCount: number; hasErrorChildren: boolean; isExpanded: boolean }
-  | { type: "child"; span: SpanEvent; depth: number; childCount: number };
+  | { type: "child"; span: SpanEvent; depth: number; childCount: number; isLast: boolean };
 
 interface ProjectInfo {
   id: string;
@@ -225,10 +224,11 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
 // --- Time Presets ---
 
 const TIME_PRESETS: { key: TimeRangePreset; label: string }[] = [
-  { key: "15m", label: "15m" },
-  { key: "1h", label: "1h" },
-  { key: "6h", label: "6h" },
-  { key: "24h", label: "24h" },
+  { key: "5m", label: "5 min" },
+  { key: "15m", label: "15 min" },
+  { key: "1h", label: "1 hour" },
+  { key: "6h", label: "6 hours" },
+  { key: "24h", label: "24 hours" },
   { key: "custom", label: "Custom" },
 ];
 
@@ -238,7 +238,6 @@ function LiveHeader({
   status,
   spanCount,
   isHistorical,
-  environments,
   onTimePreset,
   onCustomStart,
   onCustomEnd,
@@ -246,58 +245,15 @@ function LiveHeader({
   status: "connecting" | "connected" | "disconnected";
   spanCount: number;
   isHistorical?: boolean;
-  environments: string[];
   onTimePreset: (preset: TimeRangePreset) => void;
   onCustomStart: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCustomEnd: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   const filters = useFilterStore((s) => s.filters);
-  const setEnvironment = useFilterStore((s) => s.setEnvironment);
   const [searchExpanded, setSearchExpanded] = useState(false);
 
   return (
     <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
-      {/* Left: Timeframe presets */}
-      <div className="flex items-center gap-0.5 overflow-x-auto" data-testid="header-time-range">
-        <Clock className="mr-1 size-3.5 shrink-0 text-muted-foreground" />
-        {TIME_PRESETS.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => onTimePreset(key)}
-            className={cn(
-              "h-6 shrink-0 rounded-md px-2 text-xs font-medium transition-colors",
-              filters.timeRange.preset === key
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-            data-testid={`header-time-${key}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Custom time range inputs */}
-      {filters.timeRange.preset === "custom" && (
-        <div className="flex items-center gap-1" data-testid="header-custom-range">
-          <input
-            type="datetime-local"
-            onChange={onCustomStart}
-            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-            data-testid="header-custom-start"
-          />
-          <span className="text-xs text-muted-foreground">to</span>
-          <input
-            type="datetime-local"
-            onChange={onCustomEnd}
-            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-            data-testid="header-custom-end"
-          />
-        </div>
-      )}
-
-      <div className="mx-1 h-4 w-px bg-border" />
-
       {/* Search input (non-functional, AC1) */}
       <div className="hidden md:block">
         <div className="relative">
@@ -343,22 +299,40 @@ function LiveHeader({
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Right side: Environment dropdown + Connection status + Count */}
-      <div className="relative" data-testid="header-env-selector">
+      {/* Right side: Time preset select + Environment dropdown + Connection status + Count */}
+      <div className="relative" data-testid="header-time-range">
         <select
-          value={filters.environment ?? ""}
-          onChange={(e) => setEnvironment(e.target.value === "" ? null : e.target.value)}
+          value={filters.timeRange.preset}
+          onChange={(e) => onTimePreset(e.target.value as TimeRangePreset)}
           className="h-7 appearance-none rounded-md border bg-background pl-2 pr-6 text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
         >
-          <option value="">All Envs</option>
-          {environments.map((env) => (
-            <option key={env} value={env}>
-              {env}
+          {TIME_PRESETS.map(({ key, label }) => (
+            <option key={key} value={key}>
+              {label}
             </option>
           ))}
         </select>
         <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
       </div>
+
+      {/* Custom time range inputs */}
+      {filters.timeRange.preset === "custom" && (
+        <div className="flex items-center gap-1" data-testid="header-custom-range">
+          <input
+            type="datetime-local"
+            onChange={onCustomStart}
+            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            data-testid="header-custom-start"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <input
+            type="datetime-local"
+            onChange={onCustomEnd}
+            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            data-testid="header-custom-end"
+          />
+        </div>
+      )}
 
       <div className="mx-1 h-4 w-px bg-border" />
 
@@ -429,11 +403,16 @@ export default function LivePage() {
   const filters = useFilterStore((s) => s.filters);
   const setTimeRange = useFilterStore((s) => s.setTimeRange);
 
-  // Extract unique environments from span buffer (Task 5)
+  // Extract unique environments from span buffer (Task 5) and sync to store
+  const setAvailableEnvironments = useFilterStore((s) => s.setAvailableEnvironments);
   const environments = useMemo(() => {
     const envs = [...new Set(spans.map((s) => s.environment).filter(Boolean))].sort();
     return envs.length > 0 ? envs : ["unknown"];
   }, [spans]);
+
+  useEffect(() => {
+    setAvailableEnvironments(environments);
+  }, [environments, setAvailableEnvironments]);
 
   // Timeframe handling (migrated from FilterBar)
   const handleTimePreset = useCallback(
@@ -476,16 +455,20 @@ export default function LivePage() {
     const items: DisplayItem[] = [];
     for (const root of filteredRootSpans) {
       const children = childrenMap[root.span_id] ?? [];
-      const childCount = children.length;
+      // Total count = the request itself + its children
+      const totalCount = 1 + children.length;
       const hasErrorChildren = children.some((c) => c.http_status_code >= 400);
       const isExpanded = expandedSet.has(root.span_id);
 
-      items.push({ type: "root", span: root, childCount, hasErrorChildren, isExpanded });
+      items.push({ type: "root", span: root, childCount: totalCount, hasErrorChildren, isExpanded });
 
-      if (isExpanded && childCount > 0) {
-        for (const child of children) {
-          const subChildren = childrenMap[child.span_id] ?? [];
-          items.push({ type: "child", span: child, depth: 1, childCount: subChildren.length });
+      if (isExpanded) {
+        // First child row = the parent request itself
+        const allRows = [root, ...children];
+        for (let i = 0; i < allRows.length; i++) {
+          const span = allRows[i];
+          const subChildren = childrenMap[span.span_id] ?? [];
+          items.push({ type: "child", span, depth: 1, childCount: subChildren.length, isLast: i === allRows.length - 1 });
         }
       }
     }
@@ -518,7 +501,7 @@ export default function LivePage() {
 
     const store = useFilterStore.getState();
     if (time) {
-      const validPresets = new Set(["15m", "1h", "6h", "24h", "custom"]);
+      const validPresets = new Set(["5m", "15m", "1h", "6h", "24h", "custom"]);
       if (validPresets.has(time)) {
         store.setTimeRange({
           preset: time as TimeRangePreset,
@@ -533,7 +516,7 @@ export default function LivePage() {
   // Sync filters to URL search params
   useEffect(() => {
     const params = new URLSearchParams();
-    if (filters.timeRange.preset !== "15m") params.set("time", filters.timeRange.preset);
+    if (filters.timeRange.preset !== "5m") params.set("time", filters.timeRange.preset);
     if (filters.timeRange.start) params.set("start", filters.timeRange.start);
     if (filters.timeRange.end) params.set("end", filters.timeRange.end);
     if (filters.environment) params.set("env", filters.environment);
@@ -927,7 +910,6 @@ export default function LivePage() {
         status={status}
         spanCount={filteredSpans.length}
         isHistorical={isHistoricalMode}
-        environments={environments}
         onTimePreset={handleTimePreset}
         onCustomStart={handleCustomStart}
         onCustomEnd={handleCustomEnd}
@@ -1009,6 +991,7 @@ export default function LivePage() {
                           span={item.span}
                           depth={item.depth}
                           childCount={item.childCount}
+                          isLast={item.isLast}
                           isSelected={item.span.span_id === activeSpanId}
                           onClick={() => handleRowClick(item.span.span_id)}
                         />

@@ -4,17 +4,20 @@ import { DEFAULT_FILTERS } from "@/types/span";
 
 interface FilterState {
   filters: StreamFilters;
+  availableEnvironments: string[];
   setService: (service: string | null) => void;
   toggleStatusGroup: (group: StatusCodeGroup) => void;
   setEndpointSearch: (search: string) => void;
   setTimeRange: (range: TimeRange) => void;
   setEnvironment: (env: string | null) => void;
+  setAvailableEnvironments: (envs: string[]) => void;
   clearAll: () => void;
   reset: () => void;
 }
 
 export const useFilterStore = create<FilterState>((set) => ({
   filters: { ...DEFAULT_FILTERS, statusGroups: [] },
+  availableEnvironments: [],
 
   setService: (service) =>
     set((state) => ({
@@ -45,6 +48,8 @@ export const useFilterStore = create<FilterState>((set) => ({
       filters: { ...state.filters, environment: env },
     })),
 
+  setAvailableEnvironments: (envs) => set({ availableEnvironments: envs }),
+
   clearAll: () =>
     set({ filters: { ...DEFAULT_FILTERS, statusGroups: [], environment: null } }),
 
@@ -58,7 +63,7 @@ export function getActiveFilterCount(filters: StreamFilters): number {
   if (filters.service !== null) count++;
   if (filters.statusGroups.length > 0) count++;
   if (filters.endpointSearch !== "") count++;
-  if (filters.timeRange.preset !== "15m") count++;
+  if (filters.timeRange.preset !== "5m") count++;
   if (filters.environment !== null) count++;
   return count;
 }

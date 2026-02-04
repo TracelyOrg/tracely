@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Loader } from "lucide-react";
+import { Loader, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SpanEvent } from "@/types/span";
 
@@ -72,39 +72,44 @@ export const StreamRow = memo(function StreamRow({
         isSelected && "bg-accent"
       )}
     >
-      {/* Timestamp (first column) */}
-      {!isPending && (
-        <span className="shrink-0 text-xs text-muted-foreground/70 tabular-nums">
-          {formatTimestamp(span.start_time)}
-        </span>
-      )}
-      {isPending && <span className="shrink-0 w-[5ch]" />}
+      {/* Timestamp — fixed width */}
+      <span className="shrink-0 w-[7ch] text-xs text-muted-foreground/70 tabular-nums">
+        {!isPending ? formatTimestamp(span.start_time) : "\u00A0"}
+      </span>
 
-      {/* Service name */}
-      <span className="shrink-0 text-xs text-muted-foreground/70 w-16 truncate" title={serviceName}>
+      {/* Service name — fixed width */}
+      <span className="shrink-0 w-20 text-xs text-muted-foreground/70 truncate" title={serviceName}>
         {serviceName}
       </span>
 
-      {/* Child count badge (replaces chevron toggle) */}
-      {!isPending && childCount > 0 ? (
-        <button
-          onClick={handleChevronClick}
-          className={cn(
-            "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums",
-            statusColorClass(span.http_status_code),
-            "border",
-            span.http_status_code >= 400 ? "border-red-500/30" : span.http_status_code >= 200 && span.http_status_code < 300 ? "border-emerald-500/30" : "border-border"
-          )}
-          tabIndex={-1}
-          aria-label={isExpanded ? "Collapse children" : "Expand children"}
-        >
-          {childCount}
-        </button>
-      ) : (
-        <span className="shrink-0 w-5" />
-      )}
+      {/* Child count toggle — fixed width */}
+      <span className="shrink-0 w-10 flex items-center justify-center">
+        {!isPending && childCount > 0 ? (
+          <button
+            onClick={handleChevronClick}
+            className={cn(
+              "inline-flex h-5 items-center gap-0.5 rounded px-1.5 text-[11px] font-medium tabular-nums border transition-colors",
+              span.http_status_code >= 400
+                ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                : span.http_status_code >= 200 && span.http_status_code < 300
+                  ? "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+                  : "border-border text-muted-foreground hover:bg-accent"
+            )}
+            tabIndex={-1}
+            aria-label={isExpanded ? "Collapse children" : "Expand children"}
+          >
+            {isExpanded ? <Minus size={10} /> : <Plus size={10} />}
+            <span>{childCount}</span>
+          </button>
+        ) : null}
+      </span>
 
-      {/* Method + Status Code + Path */}
+      {/* Status code — fixed width */}
+      <span className={cn("shrink-0 w-8 text-xs font-medium text-center", !isPending && statusColorClass(span.http_status_code))}>
+        {!isPending ? span.http_status_code : "\u00A0"}
+      </span>
+
+      {/* Method + Path — flex */}
       <span className="min-w-0 flex-1 truncate text-foreground">
         {isPending ? (
           <span className="flex items-center gap-1.5">
@@ -114,22 +119,14 @@ export const StreamRow = memo(function StreamRow({
             <span className="text-xs text-muted-foreground">In Progress</span>
           </span>
         ) : (
-          <span className="flex items-center gap-1.5">
-            <span className={cn("text-xs font-medium", statusColorClass(span.http_status_code))}>
-              {span.http_status_code}
-            </span>
-            <span>{method}</span>
-            <span className="truncate">{route}</span>
-          </span>
+          <span className="truncate">{method} {route}</span>
         )}
       </span>
 
-      {/* Duration */}
-      {!isPending && (
-        <span className="w-16 shrink-0 text-right text-xs text-muted-foreground tabular-nums">
-          {Math.round(span.duration_ms)}ms
-        </span>
-      )}
+      {/* Duration — fixed width */}
+      <span className="shrink-0 w-16 text-right text-xs text-muted-foreground tabular-nums">
+        {!isPending ? `${Math.round(span.duration_ms)}ms` : "\u00A0"}
+      </span>
     </div>
   );
 });

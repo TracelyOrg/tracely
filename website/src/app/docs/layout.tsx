@@ -6,7 +6,13 @@ import { source } from "@/lib/source";
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <RootProvider>
+    <RootProvider
+      search={{
+        options: {
+          type: "static",
+        },
+      }}
+    >
       <DocsLayout tree={source.pageTree} {...baseOptions()}>
         {children}
       </DocsLayout>

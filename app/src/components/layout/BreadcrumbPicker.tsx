@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
+import { useFilterStore } from "@/stores/filterStore";
 
 interface OrgItem {
   id: string;
@@ -53,8 +54,14 @@ export default function BreadcrumbPicker({
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [orgOpen, setOrgOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
+  const [envOpen, setEnvOpen] = useState(false);
   const orgRef = useRef<HTMLDivElement>(null);
   const projectRef = useRef<HTMLDivElement>(null);
+  const envRef = useRef<HTMLDivElement>(null);
+
+  const availableEnvironments = useFilterStore((s) => s.availableEnvironments);
+  const currentEnvironment = useFilterStore((s) => s.filters.environment);
+  const setEnvironment = useFilterStore((s) => s.setEnvironment);
 
   const currentOrg = orgs.find((o) => o.slug === currentOrgSlug);
   const currentProject = projects.find((p) => p.slug === currentProjectSlug);
@@ -112,6 +119,9 @@ export default function BreadcrumbPicker({
         !projectRef.current.contains(e.target as Node)
       ) {
         setProjectOpen(false);
+      }
+      if (envRef.current && !envRef.current.contains(e.target as Node)) {
+        setEnvOpen(false);
       }
     }
 
@@ -192,6 +202,57 @@ export default function BreadcrumbPicker({
                     }`}
                   >
                     {proj.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Separator + Environment picker (only when project is selected and envs exist) */}
+      {currentProjectSlug && availableEnvironments.length > 0 && (
+        <>
+          <span className="text-muted-foreground">/</span>
+          <div className="relative" ref={envRef}>
+            <button
+              type="button"
+              onClick={() => setEnvOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+            >
+              <span className="max-w-[160px] truncate">
+                {currentEnvironment ?? "All Envs"}
+              </span>
+              <ChevronDown open={envOpen} />
+            </button>
+
+            {envOpen && (
+              <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-md border bg-popover p-1 shadow-md">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEnvironment(null);
+                    setEnvOpen(false);
+                  }}
+                  className={`flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent ${
+                    currentEnvironment === null ? "bg-accent font-medium" : ""
+                  }`}
+                >
+                  All Envs
+                </button>
+                {availableEnvironments.map((env) => (
+                  <button
+                    key={env}
+                    type="button"
+                    onClick={() => {
+                      setEnvironment(env);
+                      setEnvOpen(false);
+                    }}
+                    className={`flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent ${
+                      currentEnvironment === env ? "bg-accent font-medium" : ""
+                    }`}
+                  >
+                    {env}
                   </button>
                 ))}
               </div>
