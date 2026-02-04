@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
@@ -380,6 +380,24 @@ function LiveHeader({
 // --- Main Pulse View Page ---
 
 export default function LivePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+          <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
+            <div className="flex-1" />
+            <span className="text-xs text-muted-foreground">Loading...</span>
+          </div>
+          <PulseSkeleton />
+        </div>
+      }
+    >
+      <LivePageContent />
+    </Suspense>
+  );
+}
+
+function LivePageContent() {
   const params = useParams<{ orgSlug: string; projectSlug: string }>();
   const { orgSlug, projectSlug } = params;
 

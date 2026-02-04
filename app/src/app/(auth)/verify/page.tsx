@@ -1,12 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, ApiError } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 
 export default function VerifyTokenPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4 text-center">
+          <div className="flex justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Verifying your email...
+          </h1>
+        </div>
+      }
+    >
+      <VerifyContent />
+    </Suspense>
+  );
+}
+
+function VerifyContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
