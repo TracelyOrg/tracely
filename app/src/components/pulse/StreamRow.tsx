@@ -20,9 +20,12 @@ function statusColorClass(code: number): string {
 
 function StatusIcon({ code }: { code: number }) {
   const size = 14;
-  if (code >= 200 && code < 300) return <CheckCircle size={size} className="text-emerald-500" />;
-  if (code >= 400 && code < 500) return <AlertCircle size={size} className="text-amber-500" />;
-  if (code >= 500) return <XCircle size={size} className="text-red-500" />;
+  if (code >= 200 && code < 300)
+    return <CheckCircle size={size} className="text-emerald-500" aria-label="Status: healthy" role="img" />;
+  if (code >= 400 && code < 500)
+    return <AlertCircle size={size} className="text-amber-500" aria-label="Status: warning" role="img" />;
+  if (code >= 500)
+    return <XCircle size={size} className="text-red-500" aria-label="Status: error" role="img" />;
   return null;
 }
 
@@ -37,10 +40,17 @@ export const StreamRow = memo(function StreamRow({ span, isSelected, onClick }: 
   const route = span.http_route || span.span_name;
   const methodColor = METHOD_COLORS[span.http_method] ?? "bg-muted text-muted-foreground";
 
+  // Screen reader label: "GET /api/users, status 200, 42 milliseconds" (UX11)
+  const ariaLabel = isPending
+    ? `${span.http_method} ${route}, in progress`
+    : `${span.http_method} ${route}, status ${span.http_status_code}, ${Math.round(span.duration_ms)} milliseconds`;
+
   return (
     <div
       role="row"
       tabIndex={0}
+      aria-label={ariaLabel}
+      aria-selected={isSelected ?? false}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" && onClick) onClick();

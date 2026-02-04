@@ -10,11 +10,14 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
+  ClipboardCopy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SpanDetail } from "@/types/span";
 import { useTraceSpans } from "@/hooks/useTraceSpans";
 import { TraceWaterfall } from "@/components/pulse/TraceWaterfall";
+import { formatTraceForCopy } from "@/lib/formatTraceForCopy";
+import { addToast } from "@/hooks/useToast";
 
 // --- Types ---
 
@@ -60,11 +63,11 @@ function statusColor(code: number): string {
 
 function StatusIcon({ code }: { code: number }) {
   if (code >= 200 && code < 300)
-    return <CheckCircle className="size-4 text-emerald-500" />;
+    return <CheckCircle className="size-4 text-emerald-500" aria-label="Status: healthy" role="img" />;
   if (code >= 400 && code < 500)
-    return <AlertTriangle className="size-4 text-amber-500" />;
+    return <AlertTriangle className="size-4 text-amber-500" aria-label="Status: warning" role="img" />;
   if (code >= 500)
-    return <XCircle className="size-4 text-red-500" />;
+    return <XCircle className="size-4 text-red-500" aria-label="Status: error" role="img" />;
   return null;
 }
 
@@ -415,7 +418,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
   }
 
   return (
-    <div className="flex h-full flex-col border-l bg-background">
+    <div className="flex h-full flex-col border-l bg-background" role="region" aria-label="Span Inspector">
       {/* Header */}
       <div
         className={cn(
@@ -458,20 +461,39 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
             </div>
           ) : null}
         </div>
-        <button
-          onClick={onClose}
-          className="ml-2 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-          aria-label="Close inspector"
-        >
-          <X className="size-4" />
-        </button>
+        <div className="ml-2 flex items-center gap-1">
+          {detail && (
+            <button
+              onClick={async () => {
+                const text = formatTraceForCopy(detail, traceSpans);
+                await navigator.clipboard.writeText(text);
+                addToast("Trace details copied to clipboard", "success");
+              }}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label="Copy trace details"
+              title="Copy trace details"
+            >
+              <ClipboardCopy className="size-4" />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+            aria-label="Close inspector"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b">
+      <div className="flex border-b" role="tablist" aria-label="Inspector tabs">
         {TABS.map((tab) => (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            aria-controls={`tabpanel-${tab.id}`}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
               "flex-1 px-3 py-2 text-xs font-medium transition-colors",
@@ -489,7 +511,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
       </div>
 
       {/* Tab Content */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" role="tabpanel" id={`tabpanel-${activeTab}`} aria-label={`${activeTab} details`}>
         {loading && <InspectorSkeleton />}
         {error && (
           <div className="flex h-32 items-center justify-center p-4">

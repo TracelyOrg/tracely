@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import BreadcrumbPicker from "@/components/layout/BreadcrumbPicker";
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 interface AuthUser {
   user: {
@@ -50,6 +51,17 @@ export default function DashboardLayout({
     !onOnboarding && segments.length > 0 ? segments[0] : undefined;
   const currentProjectSlug =
     !onOnboarding && segments.length > 1 ? segments[1] : undefined;
+
+  // --- Keyboard chord navigation (Story 3.6, AC5, UX3) ---
+  // G→L navigates to Pulse View (Live) when org/project context is available
+  useKeyboardShortcut(
+    ["g", "l"],
+    useCallback(() => {
+      if (currentOrgSlug && currentProjectSlug) {
+        router.push(`/${currentOrgSlug}/${currentProjectSlug}/live`);
+      }
+    }, [currentOrgSlug, currentProjectSlug, router])
+  );
 
   useEffect(() => {
     let cancelled = false;

@@ -16,6 +16,7 @@ import { matchesFilters } from "@/lib/filterUtils";
 import { StreamRow } from "@/components/pulse/StreamRow";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
 import { FilterBar } from "@/components/pulse/FilterBar";
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 interface ProjectInfo {
   id: string;
@@ -371,22 +372,68 @@ export default function LivePage() {
     }
   }, [orgSlug, projectSlug, filterReset]);
 
-  // --- Span Inspector state (Story 3.3) ---
-  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
-  const inspectorOpen = selectedSpanId !== null;
+  // --- Selection & Inspector state (Story 3.3 + 3.6) ---
+  // highlightedSpanId: keyboard/click highlight (J/K navigation, AC2)
+  // inspectorSpanId: which span has its inspector open (Enter to open, Escape to close)
+  const [highlightedSpanId, setHighlightedSpanId] = useState<string | null>(null);
+  const [inspectorSpanId, setInspectorSpanId] = useState<string | null>(null);
+  const inspectorOpen = inspectorSpanId !== null;
   const { detail: spanDetail, loading: detailLoading, error: detailError } =
-    useSpanDetail(orgSlug, projectSlug, selectedSpanId);
+    useSpanDetail(orgSlug, projectSlug, inspectorSpanId);
 
-  // Escape key closes inspector (AC5, UX3)
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && inspectorOpen) {
-        setSelectedSpanId(null);
-      }
+  // The "active" span for row highlighting is either the highlighted span or the inspector span
+  const activeSpanId = highlightedSpanId ?? inspectorSpanId;
+
+  // Ref for returning focus to the stream list (AC4, UX3)
+  const listContainerRef = useRef<HTMLDivElement>(null);
+
+  // Click handler: highlight + open inspector (preserves existing behavior)
+  const handleRowClick = useCallback((spanId: string) => {
+    setHighlightedSpanId(spanId);
+    setInspectorSpanId(spanId);
+  }, []);
+
+  // --- Keyboard Navigation (Story 3.6, AC2/AC3/AC4, UX3) ---
+
+  // Compute selected index from highlighted span for keyboard navigation
+  const selectedIndex = useMemo(() => {
+    if (!highlightedSpanId) return -1;
+    return filteredSpans.findIndex((s) => s.span_id === highlightedSpanId);
+  }, [highlightedSpanId, filteredSpans]);
+
+  // J / ArrowDown — move selection down (AC2)
+  const moveDown = useCallback(() => {
+    if (filteredSpans.length === 0) return;
+    const nextIndex = selectedIndex === -1 ? 0 : Math.min(selectedIndex + 1, filteredSpans.length - 1);
+    setHighlightedSpanId(filteredSpans[nextIndex].span_id);
+  }, [filteredSpans, selectedIndex]);
+
+  // K / ArrowUp — move selection up (AC2)
+  const moveUp = useCallback(() => {
+    if (filteredSpans.length === 0) return;
+    const nextIndex = selectedIndex === -1 ? filteredSpans.length - 1 : Math.max(selectedIndex - 1, 0);
+    setHighlightedSpanId(filteredSpans[nextIndex].span_id);
+  }, [filteredSpans, selectedIndex]);
+
+  useKeyboardShortcut("j", moveDown);
+  useKeyboardShortcut("ArrowDown", moveDown);
+  useKeyboardShortcut("k", moveUp);
+  useKeyboardShortcut("ArrowUp", moveUp);
+
+  // Enter — open inspector for highlighted span (AC3)
+  useKeyboardShortcut("Enter", useCallback(() => {
+    if (highlightedSpanId) {
+      setInspectorSpanId(highlightedSpanId);
     }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [inspectorOpen]);
+  }, [highlightedSpanId]));
+
+  // Escape — close inspector and return focus to list (AC4, UX3)
+  useKeyboardShortcut("Escape", useCallback(() => {
+    if (inspectorOpen) {
+      setInspectorSpanId(null);
+      listContainerRef.current?.focus();
+    }
+  }, [inspectorOpen]), { allowInInputs: true });
 
   // Fetch project UUID for SSE endpoint
   useEffect(() => {
@@ -448,10 +495,20 @@ export default function LivePage() {
     return () => { cancelled = true; };
   }, [projectId, initialLoadDone, isHistoricalMode, orgSlug, projectSlug, prependSpans, setHasMoreHistory]);
 
+  // Live stream announcement for screen readers (AC6, UX11)
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+
   // SSE: push spans into Zustand store
   const handleSpan = useCallback(
     (data: Record<string, unknown>) => {
-      addSpan(data as unknown as SpanEvent);
+      const span = data as unknown as SpanEvent;
+      addSpan(span);
+      // Announce new span for screen readers
+      if (span.span_type !== "pending_span") {
+        setLiveAnnouncement(
+          `New request: ${span.http_method} ${span.http_route || span.span_name}, status ${span.http_status_code}`
+        );
+      }
     },
     [addSpan]
   );
@@ -618,6 +675,13 @@ export default function LivePage() {
     prevCountRef.current = filteredSpans.length;
   }, [filteredSpans.length, isAtBottom, virtualizer]);
 
+  // Auto-scroll selected row into view when keyboard-navigating (AC2, Story 3.6)
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      virtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+    }
+  }, [selectedIndex, virtualizer]);
+
   // Back to Live handler (AC3)
   function handleBackToLive() {
     virtualizer.scrollToIndex(filteredSpans.length - 1, { align: "end" });
@@ -632,6 +696,10 @@ export default function LivePage() {
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+      {/* Screen reader live region for new span announcements (AC6, UX11) */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveAnnouncement}
+      </div>
       <LiveHeader status={status} spanCount={filteredSpans.length} isHistorical={isHistoricalMode} />
       <FilterBar services={services} />
       <div className="relative flex flex-1 overflow-hidden">
@@ -639,8 +707,14 @@ export default function LivePage() {
         <div className={inspectorOpen ? "w-2/5 hidden md:block" : "w-full"}>
           <div className="relative h-full">
             <div
-              ref={parentRef}
-              className="h-full overflow-auto"
+              ref={(el) => {
+                (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                (listContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+              }}
+              tabIndex={-1}
+              role="list"
+              aria-label="Request stream"
+              className="h-full overflow-auto outline-none"
             >
               {showSkeleton && <PulseSkeleton />}
               {showEmpty && <EmptyState orgSlug={orgSlug} projectSlug={projectSlug} />}
@@ -706,15 +780,15 @@ export default function LivePage() {
                           >
                             <StreamRow
                               span={span}
-                              isSelected={span.span_id === selectedSpanId}
-                              onClick={() => setSelectedSpanId(span.span_id)}
+                              isSelected={span.span_id === activeSpanId}
+                              onClick={() => handleRowClick(span.span_id)}
                             />
                           </motion.div>
                         ) : (
                           <StreamRow
                             span={span}
-                            isSelected={span.span_id === selectedSpanId}
-                            onClick={() => setSelectedSpanId(span.span_id)}
+                            isSelected={span.span_id === activeSpanId}
+                            onClick={() => handleRowClick(span.span_id)}
                           />
                         )}
                       </div>
@@ -750,7 +824,7 @@ export default function LivePage() {
               detail={spanDetail}
               loading={detailLoading}
               error={detailError}
-              onClose={() => setSelectedSpanId(null)}
+              onClose={() => setInspectorSpanId(null)}
               orgSlug={orgSlug}
               projectSlug={projectSlug}
             />
