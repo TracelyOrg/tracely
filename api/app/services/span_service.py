@@ -23,6 +23,7 @@ _HISTORY_COLUMNS = [
     "http_method",
     "http_route",
     "http_status_code",
+    "environment",
 ]
 
 _COLUMNS_SQL = ", ".join(_HISTORY_COLUMNS)

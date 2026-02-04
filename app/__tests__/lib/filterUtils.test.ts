@@ -17,6 +17,7 @@ function makeSpan(overrides: Partial<SpanEvent> = {}): SpanEvent {
     http_method: "GET",
     http_route: "/api/users",
     http_status_code: 200,
+    environment: "",
     ...overrides,
   };
 }
@@ -150,6 +151,7 @@ describe("matchesFilters", () => {
       statusGroups: ["2xx"],
       endpointSearch: "/users",
       timeRange: { preset: "15m" },
+      environment: null,
     };
     const match = makeSpan({
       service_name: "api",

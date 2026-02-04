@@ -32,6 +32,7 @@ function makeSpan(overrides: Partial<TraceSpanEvent> = {}): TraceSpanEvent {
     http_method: "GET",
     http_route: "/api/users",
     http_status_code: 200,
+    environment: "",
     attributes: {},
     ...overrides,
   };

@@ -20,6 +20,7 @@ const makeSpan = (overrides: Partial<SpanEvent> = {}): SpanEvent => ({
   http_method: "GET",
   http_route: "/api/users",
   http_status_code: 200,
+  environment: "",
   ...overrides,
 });
 
@@ -30,9 +31,9 @@ describe("StreamRow ARIA accessibility (AC6, UX11)", () => {
     expect(icon).toBeInTheDocument();
   });
 
-  it("has aria-label on warning status icon", () => {
+  it("has aria-label on error status icon for 4xx", () => {
     render(<StreamRow span={makeSpan({ http_status_code: 404 })} />);
-    const icon = screen.getByLabelText("Status: warning");
+    const icon = screen.getByLabelText("Status: error");
     expect(icon).toBeInTheDocument();
   });
 

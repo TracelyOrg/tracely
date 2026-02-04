@@ -8,6 +8,7 @@ interface FilterState {
   toggleStatusGroup: (group: StatusCodeGroup) => void;
   setEndpointSearch: (search: string) => void;
   setTimeRange: (range: TimeRange) => void;
+  setEnvironment: (env: string | null) => void;
   clearAll: () => void;
   reset: () => void;
 }
@@ -39,11 +40,16 @@ export const useFilterStore = create<FilterState>((set) => ({
       filters: { ...state.filters, timeRange: range },
     })),
 
+  setEnvironment: (env) =>
+    set((state) => ({
+      filters: { ...state.filters, environment: env },
+    })),
+
   clearAll: () =>
-    set({ filters: { ...DEFAULT_FILTERS, statusGroups: [] } }),
+    set({ filters: { ...DEFAULT_FILTERS, statusGroups: [], environment: null } }),
 
   reset: () =>
-    set({ filters: { ...DEFAULT_FILTERS, statusGroups: [] } }),
+    set({ filters: { ...DEFAULT_FILTERS, statusGroups: [], environment: null } }),
 }));
 
 /** Compute the number of active (non-default) filters. */
@@ -53,5 +59,6 @@ export function getActiveFilterCount(filters: StreamFilters): number {
   if (filters.statusGroups.length > 0) count++;
   if (filters.endpointSearch !== "") count++;
   if (filters.timeRange.preset !== "15m") count++;
+  if (filters.environment !== null) count++;
   return count;
 }

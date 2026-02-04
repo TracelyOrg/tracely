@@ -102,6 +102,7 @@ describe("formatTraceForCopy", () => {
         http_method: "GET",
         http_route: "/api/users",
         http_status_code: 200,
+        environment: "",
       },
       {
         trace_id: "abc123def456",
@@ -117,6 +118,7 @@ describe("formatTraceForCopy", () => {
         http_method: "",
         http_route: "",
         http_status_code: 0,
+        environment: "",
       },
     ];
     const result = formatTraceForCopy(MOCK_DETAIL, traceSpans);

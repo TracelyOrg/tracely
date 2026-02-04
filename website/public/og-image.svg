@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#0a0a0a"/>
+  <text x="600" y="280" font-family="system-ui" font-size="64" font-weight="bold" fill="#ededed" text-anchor="middle">Tracely</text>
+  <text x="600" y="340" font-family="system-ui" font-size="24" fill="#f59e0b" text-anchor="middle">Real-time observability for Python</text>
+  <text x="600" y="400" font-family="system-ui" font-size="18" fill="#a1a1aa" text-anchor="middle">Zero-config auto-instrumentation for FastAPI, Django, and Flask</text>
+</svg>

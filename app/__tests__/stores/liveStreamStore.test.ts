@@ -16,6 +16,7 @@ function makeSpan(overrides: Partial<SpanEvent> = {}): SpanEvent {
     http_method: "GET",
     http_route: "/api/users",
     http_status_code: 200,
+    environment: "",
     ...overrides,
   };
 }

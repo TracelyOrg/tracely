@@ -122,6 +122,7 @@ describe("getActiveFilterCount", () => {
       statusGroups: ["5xx"],
       endpointSearch: "/users",
       timeRange: { preset: "1h" },
+      environment: null,
     };
     expect(getActiveFilterCount(f)).toBe(4);
   });

@@ -133,7 +133,7 @@ describe("PulseView Page", () => {
 
     render(<LivePage />);
 
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
     expect(screen.getByText("Live")).toBeInTheDocument();
   });
 
@@ -148,7 +148,7 @@ describe("PulseView Page", () => {
 
     render(<LivePage />);
 
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
     expect(screen.getByText("Connecting...")).toBeInTheDocument();
   });
 
@@ -163,7 +163,7 @@ describe("PulseView Page", () => {
 
     render(<LivePage />);
 
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
@@ -175,7 +175,7 @@ describe("PulseView Page", () => {
     render(<LivePage />);
 
     // Wait for effect to trigger
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
 
     expect(mockUseEventStream).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -212,12 +212,13 @@ describe("PulseView Page", () => {
       http_method: "GET",
       http_route: "/api/test",
       http_status_code: 200,
+      environment: "",
     });
     useLiveStreamStore.getState().setIsAtBottom(false);
 
     render(<LivePage />);
 
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
     expect(screen.getByText("Back to Live")).toBeInTheDocument();
   });
 
@@ -245,11 +246,12 @@ describe("PulseView Page", () => {
       http_method: "GET",
       http_route: "/api/test",
       http_status_code: 200,
+      environment: "",
     });
 
     render(<LivePage />);
 
-    await screen.findByText("Pulse View");
+    await screen.findByTestId("header-time-range");
     expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();
   });
 

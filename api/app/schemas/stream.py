@@ -26,6 +26,7 @@ class SpanSummary(BaseModel):
     http_method: str
     http_route: str
     http_status_code: int
+    environment: str = ""
 
 
 class TraceSpan(SpanSummary):
@@ -58,4 +59,5 @@ def build_span_summary(span_row: dict[str, Any]) -> SpanSummary:
         http_method=span_row.get("http_method", ""),
         http_route=span_row.get("http_route", ""),
         http_status_code=span_row.get("http_status_code", 0),
+        environment=span_row.get("environment", ""),
     )

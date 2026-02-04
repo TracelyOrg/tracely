@@ -4,19 +4,24 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useParams, useSearchParams } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock } from "lucide-react";
+import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock, Search, ChevronDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
-import type { SpanEvent, StatusCodeGroup, TimeRangePreset } from "@/types/span";
+import type { SpanEvent, TimeRangePreset } from "@/types/span";
 import { useEventStream } from "@/hooks/useEventStream";
 import { useSpanDetail } from "@/hooks/useSpanDetail";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
 import { matchesFilters } from "@/lib/filterUtils";
+import { cn } from "@/lib/utils";
 import { StreamRow } from "@/components/pulse/StreamRow";
+import { ChildSpanRow } from "@/components/pulse/ChildSpanRow";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
-import { FilterBar } from "@/components/pulse/FilterBar";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
+
+type DisplayItem =
+  | { type: "root"; span: SpanEvent; childCount: number; hasErrorChildren: boolean; isExpanded: boolean }
+  | { type: "child"; span: SpanEvent; depth: number; childCount: number };
 
 interface ProjectInfo {
   id: string;
@@ -217,25 +222,147 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
   );
 }
 
-// --- Live Header (40px, AC1 UX12) ---
+// --- Time Presets ---
+
+const TIME_PRESETS: { key: TimeRangePreset; label: string }[] = [
+  { key: "15m", label: "15m" },
+  { key: "1h", label: "1h" },
+  { key: "6h", label: "6h" },
+  { key: "24h", label: "24h" },
+  { key: "custom", label: "Custom" },
+];
+
+// --- Live Header (40px, AC1 UX12, Story 11.2) ---
 
 function LiveHeader({
   status,
   spanCount,
   isHistorical,
+  environments,
+  onTimePreset,
+  onCustomStart,
+  onCustomEnd,
 }: {
   status: "connecting" | "connected" | "disconnected";
   spanCount: number;
   isHistorical?: boolean;
+  environments: string[];
+  onTimePreset: (preset: TimeRangePreset) => void;
+  onCustomStart: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onCustomEnd: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
+  const filters = useFilterStore((s) => s.filters);
+  const setEnvironment = useFilterStore((s) => s.setEnvironment);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+
   return (
-    <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b bg-background/95 px-4 backdrop-blur-sm">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Pulse View</span>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {spanCount > 0 && `${spanCount.toLocaleString()} requests`}
-        </span>
+    <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
+      {/* Left: Timeframe presets */}
+      <div className="flex items-center gap-0.5 overflow-x-auto" data-testid="header-time-range">
+        <Clock className="mr-1 size-3.5 shrink-0 text-muted-foreground" />
+        {TIME_PRESETS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => onTimePreset(key)}
+            className={cn(
+              "h-6 shrink-0 rounded-md px-2 text-xs font-medium transition-colors",
+              filters.timeRange.preset === key
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            )}
+            data-testid={`header-time-${key}`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+
+      {/* Custom time range inputs */}
+      {filters.timeRange.preset === "custom" && (
+        <div className="flex items-center gap-1" data-testid="header-custom-range">
+          <input
+            type="datetime-local"
+            onChange={onCustomStart}
+            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            data-testid="header-custom-start"
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <input
+            type="datetime-local"
+            onChange={onCustomEnd}
+            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+            data-testid="header-custom-end"
+          />
+        </div>
+      )}
+
+      <div className="mx-1 h-4 w-px bg-border" />
+
+      {/* Search input (non-functional, AC1) */}
+      <div className="hidden md:block">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search with filters..."
+            readOnly
+            className="h-7 min-w-[250px] max-w-[400px] rounded-md border bg-background pl-8 pr-3 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            data-testid="header-search"
+          />
+        </div>
+      </div>
+      {/* Mobile: search icon button */}
+      <button
+        className="flex md:hidden shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+        onClick={() => setSearchExpanded(!searchExpanded)}
+        data-testid="header-search-mobile"
+      >
+        <Search className="size-3.5" />
+      </button>
+
+      {/* Mobile expanded search overlay */}
+      {searchExpanded && (
+        <div className="absolute left-0 top-10 z-20 flex w-full items-center gap-2 border-b bg-background px-4 py-2 md:hidden">
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search with filters..."
+            readOnly
+            autoFocus
+            className="h-7 flex-1 rounded-md border bg-background px-3 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+          />
+          <button
+            onClick={() => setSearchExpanded(false)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Right side: Environment dropdown + Connection status + Count */}
+      <div className="relative" data-testid="header-env-selector">
+        <select
+          value={filters.environment ?? ""}
+          onChange={(e) => setEnvironment(e.target.value === "" ? null : e.target.value)}
+          className="h-7 appearance-none rounded-md border bg-background pl-2 pr-6 text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+        >
+          <option value="">All Envs</option>
+          {environments.map((env) => (
+            <option key={env} value={env}>
+              {env}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+      </div>
+
+      <div className="mx-1 h-4 w-px bg-border" />
+
+      {/* Connection status */}
       <div className="flex items-center gap-1.5">
         {isHistorical ? (
           <>
@@ -265,6 +392,11 @@ function LiveHeader({
           </>
         )}
       </div>
+
+      {/* Request count */}
+      <span className="text-xs text-muted-foreground tabular-nums" data-testid="header-span-count">
+        {spanCount > 0 && `${spanCount.toLocaleString()} requests`}
+      </span>
     </div>
   );
 }
@@ -280,28 +412,88 @@ export default function LivePage() {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const spans = useLiveStreamStore((s) => s.spans);
+  const childrenMap = useLiveStreamStore((s) => s.childrenMap);
+  const expandedSpanIds = useLiveStreamStore((s) => s.expandedSpanIds);
   const isAtBottom = useLiveStreamStore((s) => s.isAtBottom);
   const isLoadingHistory = useLiveStreamStore((s) => s.isLoadingHistory);
   const hasMoreHistory = useLiveStreamStore((s) => s.hasMoreHistory);
   const addSpan = useLiveStreamStore((s) => s.addSpan);
   const prependSpans = useLiveStreamStore((s) => s.prependSpans);
+  const toggleExpanded = useLiveStreamStore((s) => s.toggleExpanded);
   const setIsAtBottom = useLiveStreamStore((s) => s.setIsAtBottom);
   const setLoadingHistory = useLiveStreamStore((s) => s.setLoadingHistory);
   const setHasMoreHistory = useLiveStreamStore((s) => s.setHasMoreHistory);
   const reset = useLiveStreamStore((s) => s.reset);
 
-  // --- Filter state (Story 3.5) ---
+  // --- Filter state (Story 3.5, 11.2) ---
   const filters = useFilterStore((s) => s.filters);
+  const setTimeRange = useFilterStore((s) => s.setTimeRange);
 
-  const services = useMemo(
-    () => [...new Set(spans.map((s) => s.service_name))].sort(),
-    [spans]
+  // Extract unique environments from span buffer (Task 5)
+  const environments = useMemo(() => {
+    const envs = [...new Set(spans.map((s) => s.environment).filter(Boolean))].sort();
+    return envs.length > 0 ? envs : ["unknown"];
+  }, [spans]);
+
+  // Timeframe handling (migrated from FilterBar)
+  const handleTimePreset = useCallback(
+    (preset: TimeRangePreset) => {
+      if (preset === "custom") {
+        setTimeRange({ preset: "custom" });
+      } else {
+        setTimeRange({ preset });
+      }
+    },
+    [setTimeRange]
   );
 
-  const filteredSpans = useMemo(
+  const handleCustomStart = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const iso = e.target.value ? new Date(e.target.value).toISOString() : undefined;
+      setTimeRange({ preset: "custom", start: iso, end: filters.timeRange.end });
+    },
+    [setTimeRange, filters.timeRange.end]
+  );
+
+  const handleCustomEnd = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const iso = e.target.value ? new Date(e.target.value).toISOString() : undefined;
+      setTimeRange({ preset: "custom", start: filters.timeRange.start, end: iso });
+    },
+    [setTimeRange, filters.timeRange.start]
+  );
+
+  // Filter root spans only (children inherit parent visibility)
+  const filteredRootSpans = useMemo(
     () => spans.filter((s) => matchesFilters(s, filters)),
     [spans, filters]
   );
+
+  // Build flat display list: root spans + expanded children
+  const expandedSet = useMemo(() => new Set(expandedSpanIds), [expandedSpanIds]);
+
+  const displayList: DisplayItem[] = useMemo(() => {
+    const items: DisplayItem[] = [];
+    for (const root of filteredRootSpans) {
+      const children = childrenMap[root.span_id] ?? [];
+      const childCount = children.length;
+      const hasErrorChildren = children.some((c) => c.http_status_code >= 400);
+      const isExpanded = expandedSet.has(root.span_id);
+
+      items.push({ type: "root", span: root, childCount, hasErrorChildren, isExpanded });
+
+      if (isExpanded && childCount > 0) {
+        for (const child of children) {
+          const subChildren = childrenMap[child.span_id] ?? [];
+          items.push({ type: "child", span: child, depth: 1, childCount: subChildren.length });
+        }
+      }
+    }
+    return items;
+  }, [filteredRootSpans, childrenMap, expandedSet]);
+
+  // Backward-compatible alias used by existing code (auto-scroll, counts, empty state)
+  const filteredSpans = filteredRootSpans;
 
   // Historical mode: custom time range with both start and end set (AC5)
   const isHistoricalMode =
@@ -319,22 +511,12 @@ export default function LivePage() {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
 
-    const svc = searchParams.get("svc");
-    const statusParam = searchParams.get("status");
-    const q = searchParams.get("q");
     const time = searchParams.get("time");
     const start = searchParams.get("start");
     const end = searchParams.get("end");
+    const env = searchParams.get("env");
 
     const store = useFilterStore.getState();
-    if (svc) store.setService(svc);
-    if (statusParam) {
-      const validGroups = new Set(["2xx", "3xx", "4xx", "5xx"]);
-      statusParam.split(",").forEach((g) => {
-        if (validGroups.has(g)) store.toggleStatusGroup(g as StatusCodeGroup);
-      });
-    }
-    if (q) store.setEndpointSearch(q);
     if (time) {
       const validPresets = new Set(["15m", "1h", "6h", "24h", "custom"]);
       if (validPresets.has(time)) {
@@ -345,17 +527,16 @@ export default function LivePage() {
         });
       }
     }
+    if (env) store.setEnvironment(env);
   }, [searchParams]);
 
   // Sync filters to URL search params
   useEffect(() => {
     const params = new URLSearchParams();
-    if (filters.service) params.set("svc", filters.service);
-    if (filters.statusGroups.length > 0) params.set("status", filters.statusGroups.join(","));
-    if (filters.endpointSearch) params.set("q", filters.endpointSearch);
     if (filters.timeRange.preset !== "15m") params.set("time", filters.timeRange.preset);
     if (filters.timeRange.start) params.set("start", filters.timeRange.start);
     if (filters.timeRange.end) params.set("end", filters.timeRange.end);
+    if (filters.environment) params.set("env", filters.environment);
 
     const search = params.toString();
     const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
@@ -526,11 +707,9 @@ export default function LivePage() {
   /** Build filter query params for server-side filtering in historical mode. */
   const buildFilterParams = useCallback(() => {
     const params: string[] = [];
-    if (filters.service) params.push(`service=${encodeURIComponent(filters.service)}`);
-    if (filters.statusGroups.length > 0) params.push(`status_groups=${encodeURIComponent(filters.statusGroups.join(","))}`);
-    if (filters.endpointSearch) params.push(`endpoint_search=${encodeURIComponent(filters.endpointSearch)}`);
+    if (filters.environment) params.push(`environment=${encodeURIComponent(filters.environment)}`);
     return params.length > 0 ? `&${params.join("&")}` : "";
-  }, [filters.service, filters.statusGroups, filters.endpointSearch]);
+  }, [filters.environment]);
 
   const loadHistory = useCallback(async () => {
     if (fetchingRef.current || !projectId || !hasMoreHistory) return;
@@ -559,7 +738,9 @@ export default function LivePage() {
       } else {
         // API returns newest-first; reverse for chronological prepend
         const chronological = [...fetched].reverse();
-        scrollAdjustRef.current = chronological.length * ROW_HEIGHT;
+        // Only root spans affect scroll position (children are collapsed by default)
+        const rootCount = chronological.filter((s) => !s.parent_span_id || s.parent_span_id === "").length;
+        scrollAdjustRef.current = rootCount * ROW_HEIGHT;
         prependSpans(chronological);
 
         const meta = res.meta as { has_more?: boolean };
@@ -631,7 +812,7 @@ export default function LivePage() {
   const prevCountRef = useRef(0);
 
   const virtualizer = useVirtualizer({
-    count: filteredSpans.length,
+    count: displayList.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 20,
@@ -669,22 +850,30 @@ export default function LivePage() {
 
   // Auto-scroll when at bottom and new spans arrive (AC2)
   useEffect(() => {
-    if (isAtBottom && filteredSpans.length > 0 && filteredSpans.length > prevCountRef.current) {
-      virtualizer.scrollToIndex(filteredSpans.length - 1, { align: "end" });
+    if (isAtBottom && displayList.length > 0 && displayList.length > prevCountRef.current) {
+      virtualizer.scrollToIndex(displayList.length - 1, { align: "end" });
     }
-    prevCountRef.current = filteredSpans.length;
-  }, [filteredSpans.length, isAtBottom, virtualizer]);
+    prevCountRef.current = displayList.length;
+  }, [displayList.length, isAtBottom, virtualizer]);
 
   // Auto-scroll selected row into view when keyboard-navigating (AC2, Story 3.6)
+  // Map root span index to displayList index (accounts for expanded children)
+  const selectedDisplayIndex = useMemo(() => {
+    if (!highlightedSpanId) return -1;
+    return displayList.findIndex(
+      (item) => item.type === "root" && item.span.span_id === highlightedSpanId
+    );
+  }, [highlightedSpanId, displayList]);
+
   useEffect(() => {
-    if (selectedIndex >= 0) {
-      virtualizer.scrollToIndex(selectedIndex, { align: "auto" });
+    if (selectedDisplayIndex >= 0) {
+      virtualizer.scrollToIndex(selectedDisplayIndex, { align: "auto" });
     }
-  }, [selectedIndex, virtualizer]);
+  }, [selectedDisplayIndex, virtualizer]);
 
   // Back to Live handler (AC3)
   function handleBackToLive() {
-    virtualizer.scrollToIndex(filteredSpans.length - 1, { align: "end" });
+    virtualizer.scrollToIndex(displayList.length - 1, { align: "end" });
     setIsAtBottom(true);
   }
 
@@ -700,8 +889,15 @@ export default function LivePage() {
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </div>
-      <LiveHeader status={status} spanCount={filteredSpans.length} isHistorical={isHistoricalMode} />
-      <FilterBar services={services} />
+      <LiveHeader
+        status={status}
+        spanCount={filteredSpans.length}
+        isHistorical={isHistoricalMode}
+        environments={environments}
+        onTimePreset={handleTimePreset}
+        onCustomStart={handleCustomStart}
+        onCustomEnd={handleCustomEnd}
+      />
       <div className="relative flex flex-1 overflow-hidden">
         {/* Stream list — compresses to 40% when inspector is open (AC1, UX2) */}
         <div className={inspectorOpen ? "w-2/5 hidden md:block" : "w-full"}>
@@ -755,14 +951,35 @@ export default function LivePage() {
                   )}
 
                   {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const span = filteredSpans[virtualRow.index];
+                    const item = displayList[virtualRow.index];
                     const isNew =
                       virtualRow.index >= prevCountRef.current - 1 &&
-                      virtualRow.index === filteredSpans.length - 1;
+                      virtualRow.index === displayList.length - 1;
+
+                    const rowContent =
+                      item.type === "root" ? (
+                        <StreamRow
+                          span={item.span}
+                          isSelected={item.span.span_id === activeSpanId}
+                          childCount={item.childCount}
+                          hasErrorChildren={item.hasErrorChildren}
+                          isExpanded={item.isExpanded}
+                          onToggleExpand={() => toggleExpanded(item.span.span_id)}
+                          onClick={() => handleRowClick(item.span.span_id)}
+                        />
+                      ) : (
+                        <ChildSpanRow
+                          span={item.span}
+                          depth={item.depth}
+                          childCount={item.childCount}
+                          isSelected={item.span.span_id === activeSpanId}
+                          onClick={() => handleRowClick(item.span.span_id)}
+                        />
+                      );
 
                     return (
                       <div
-                        key={span.span_id}
+                        key={`${item.type}-${item.span.span_id}`}
                         style={{
                           position: "absolute",
                           top: 0,
@@ -778,18 +995,10 @@ export default function LivePage() {
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.15 }}
                           >
-                            <StreamRow
-                              span={span}
-                              isSelected={span.span_id === activeSpanId}
-                              onClick={() => handleRowClick(span.span_id)}
-                            />
+                            {rowContent}
                           </motion.div>
                         ) : (
-                          <StreamRow
-                            span={span}
-                            isSelected={span.span_id === activeSpanId}
-                            onClick={() => handleRowClick(span.span_id)}
-                          />
+                          rowContent
                         )}
                       </div>
                     );

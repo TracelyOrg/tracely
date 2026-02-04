@@ -16,6 +16,7 @@ export interface StreamFilters {
   statusGroups: StatusCodeGroup[];
   endpointSearch: string;
   timeRange: TimeRange;
+  environment: string | null;
 }
 
 export const DEFAULT_FILTERS: StreamFilters = {
@@ -23,6 +24,7 @@ export const DEFAULT_FILTERS: StreamFilters = {
   statusGroups: [],
   endpointSearch: "",
   timeRange: { preset: "15m" },
+  environment: null,
 };
 
 // --- Span types ---
@@ -41,6 +43,7 @@ export interface SpanEvent {
   http_method: string;
   http_route: string;
   http_status_code: number;
+  environment: string;
 }
 
 /** Extended span data for the Trace Waterfall view (includes attributes). */
