@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { Sun, Moon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import BreadcrumbPicker from "@/components/layout/BreadcrumbPicker";
@@ -51,6 +52,23 @@ export default function DashboardLayout({
     !onOnboarding && segments.length > 0 ? segments[0] : undefined;
   const currentProjectSlug =
     !onOnboarding && segments.length > 1 ? segments[1] : undefined;
+
+  // --- Theme toggle ---
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    const prefersDark = stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    setDark(prefersDark);
+    document.documentElement.classList.toggle("dark", prefersDark);
+  }, []);
+
+  function toggleTheme() {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("theme", next ? "dark" : "light");
+  }
 
   // --- Keyboard chord navigation (Story 3.6, AC5, UX3) ---
   // G→L navigates to Pulse View (Live) when org/project context is available
@@ -136,6 +154,16 @@ export default function DashboardLayout({
       {!onOnboarding && (
         <header className="flex h-12 items-center border-b px-4">
           <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
+          <div className="ml-auto">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
+          </div>
         </header>
       )}
       <main>{children}</main>

@@ -1,0 +1,57 @@
+---
+title: Flask
+description: Auto-instrument your Flask application.
+---
+
+Tracely auto-detects Flask and instruments route handlers and extensions.
+
+## Setup
+
+```python
+from flask import Flask
+import tracely
+
+tracely.init()
+app = Flask(__name__)
+
+@app.route("/users/<int:user_id>")
+def get_user(user_id):
+    return {"user_id": user_id}
+```
+
+## How Auto-Detection Works
+
+The SDK detects Flask by inspecting for the `flask` module. Once detected, it:
+
+1. Wraps the WSGI application to capture all incoming requests
+2. Instruments `before_request` and `after_request` hooks
+3. Hooks into SQLAlchemy (if Flask-SQLAlchemy is present)
+4. Wraps external HTTP clients
+
+## What Gets Instrumented
+
+| Component | Details |
+|-----------|---------|
+| Route handlers | Function name, URL rule, execution time |
+| Before/after hooks | Hook function name, timing |
+| Flask-SQLAlchemy | SQL queries via SQLAlchemy integration |
+| External HTTP | httpx/requests calls to external APIs |
+
+## Example with Flask-SQLAlchemy
+
+```python
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+import tracely
+
+tracely.init()
+app = Flask(__name__)
+db = SQLAlchemy(app)
+
+@app.route("/users/<int:user_id>")
+def get_user(user_id):
+    user = User.query.get(user_id)  # Auto-captured
+    return {"name": user.name}
+```
+
+Database queries through Flask-SQLAlchemy are automatically captured as child spans.

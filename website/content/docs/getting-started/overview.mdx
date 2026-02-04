@@ -1,0 +1,30 @@
+---
+title: Overview
+description: What is Tracely and why use it.
+---
+
+Tracely is a real-time observability platform designed specifically for Python applications. It captures every HTTP request, database query, and external call flowing through your app — with zero configuration required.
+
+## Key Features
+
+- **Real-time monitoring** — Watch requests as they happen in the Pulse View live stream with sub-500ms latency.
+- **Auto-instrumentation** — Automatically captures routes, middleware, database queries, and external HTTP calls for FastAPI, Django, and Flask.
+- **Smart data redaction** — Passwords, tokens, API keys, and PII are automatically masked before data leaves your application.
+- **Trace inspection** — Drill into any request to see the full trace tree: parent spans, child queries, external calls, and timing waterfall.
+- **Open source** — Self-host or use the cloud. Your data, your choice.
+
+## Architecture
+
+```
+Your Python App
+    │
+    ├── tracely.init()  ← SDK auto-detects framework
+    │
+    ├── Captures spans (requests, queries, calls)
+    │
+    ├── Redacts sensitive data (passwords, tokens, PII)
+    │
+    └── Sends via OTLP/HTTP → Tracely API → Dashboard
+```
+
+The SDK operates with sub-1ms overhead per request and less than 10MB memory usage. All errors are caught silently — the SDK never crashes your application.

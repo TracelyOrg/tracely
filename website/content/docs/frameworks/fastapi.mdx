@@ -1,0 +1,72 @@
+---
+title: FastAPI
+description: Auto-instrument your FastAPI application.
+---
+
+Tracely auto-detects FastAPI at startup and instruments your application with zero configuration.
+
+## Setup
+
+```python
+from fastapi import FastAPI
+import tracely
+
+tracely.init()
+app = FastAPI()
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int):
+    return {"user_id": user_id}
+```
+
+> [!NOTE]
+> Call `tracely.init()` **before** creating your FastAPI app instance for best results.
+
+## How Auto-Detection Works
+
+When `tracely.init()` runs, the SDK:
+
+1. Inspects loaded modules for the `fastapi` package
+2. Hooks into ASGI middleware to capture all incoming requests
+3. Instruments SQLAlchemy sessions (if present) for database query capture
+4. Wraps `httpx` clients for external HTTP call tracing
+
+No decorators, no middleware registration, no code changes to your routes.
+
+## What Gets Captured
+
+| Span Type | Details |
+|-----------|---------|
+| HTTP request | Method, path, status code, request/response bodies, headers |
+| Route handler | Function name, execution time |
+| SQLAlchemy query | SQL statement, execution time, database name |
+| External HTTP call | URL, method, status code, response time |
+| ASGI middleware | Each middleware in the stack with timing |
+
+## What You'll See in Pulse View
+
+For each incoming request, you'll see a trace tree like:
+
+```
+▼ GET /users/42                    200  54ms
+  ├─ middleware.cors                      1ms
+  ├─ db.query SELECT * FROM users        12ms
+  └─ middleware.auth                      2ms
+```
+
+Every child span is nested under the root HTTP span, giving you a complete picture of where time is spent.
+
+## SQLAlchemy Integration
+
+If SQLAlchemy is installed, Tracely automatically captures all queries:
+
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    user = await db.get(User, user_id)  # Auto-captured as a child span
+    return user
+```
+
+No additional setup needed — the SDK hooks into SQLAlchemy's event system.

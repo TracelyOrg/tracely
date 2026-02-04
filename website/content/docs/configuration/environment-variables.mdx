@@ -1,0 +1,45 @@
+---
+title: Environment Variables
+description: All configuration options for the Tracely SDK.
+---
+
+The Tracely SDK is configured entirely through environment variables. No code changes needed beyond `tracely.init()`.
+
+## Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `TRACELY_API_KEY` | Yes | — | Project API key in `trly_` format |
+| `TRACELY_ENVIRONMENT` | No | `"unknown"` | Environment name (production, staging, dev) |
+| `TRACELY_ENDPOINT` | No | Cloud API URL | API endpoint for self-hosted deployments |
+| `TRACELY_REDACT_FIELDS` | No | — | Comma-separated additional field names to redact |
+| `TRACELY_SERVICE_NAME` | No | Auto-detected | Override the service name sent with spans |
+
+## Example `.env` File
+
+```bash
+# Required
+TRACELY_API_KEY=trly_abc123def456
+
+# Optional
+TRACELY_ENVIRONMENT=production
+TRACELY_SERVICE_NAME=my-api
+TRACELY_REDACT_FIELDS=my_secret_field,internal_token
+```
+
+## API Key
+
+The API key authenticates your application with the Tracely API. Keys use the `trly_` prefix followed by 32 hex characters.
+
+> [!WARNING]
+> API keys are shown once on creation. Store them securely — they cannot be retrieved after the initial display.
+
+**When the API key is missing:** The SDK logs a warning and disables instrumentation. Your application continues to run normally without monitoring.
+
+## Service Name
+
+By default, the SDK auto-detects your service name from the framework or module. Set `TRACELY_SERVICE_NAME` to override this when running multiple services in the same project.
+
+## Endpoint
+
+For self-hosted deployments, set `TRACELY_ENDPOINT` to your Tracely API URL. Cloud users don't need to set this.

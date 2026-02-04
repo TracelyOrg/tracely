@@ -1,0 +1,48 @@
+---
+title: tracely.init()
+description: Initialize the Tracely SDK and start auto-instrumentation.
+---
+
+`tracely.init()` is the single entry point for the Tracely SDK. It reads configuration, detects your framework, and sets up automatic instrumentation.
+
+## Usage
+
+```python
+import tracely
+
+tracely.init()
+```
+
+Call this once at application startup, before your framework initializes.
+
+## What Happens on Init
+
+1. **Reads environment variables** — `TRACELY_API_KEY`, `TRACELY_ENVIRONMENT`, etc.
+2. **Detects framework** — Inspects loaded modules for FastAPI, Django, or Flask.
+3. **Sets up instrumentation** — Hooks into the detected framework, SQLAlchemy, and HTTP clients.
+4. **Starts transport** — Opens a connection for sending spans via OTLP/HTTP.
+
+## Behavior
+
+### When API Key is Missing
+
+The SDK logs a warning to stderr and disables all instrumentation. Your application runs normally with zero overhead.
+
+```
+[tracely] WARNING: TRACELY_API_KEY not set. Instrumentation disabled.
+```
+
+### When API is Unreachable
+
+The SDK buffers span data locally and retries sending silently. No errors are raised — your application is never affected by Tracely API availability.
+
+- Batch sends every 1 second or 50 spans (whichever comes first)
+- Retries with exponential backoff: 100ms → 1s → 5s max
+- Buffer capped at ~5000 spans to limit memory usage
+
+### Error Handling
+
+The SDK catches all exceptions internally. `tracely.init()` never throws — even with invalid configuration, missing dependencies, or network failures.
+
+> [!NOTE]
+> This is by design. An observability SDK should never crash the application it's monitoring.

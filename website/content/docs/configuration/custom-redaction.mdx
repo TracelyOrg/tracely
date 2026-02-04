@@ -1,0 +1,78 @@
+---
+title: Custom Redaction
+description: Configure what data gets redacted before it leaves your app.
+---
+
+Tracely automatically redacts sensitive data before it ever leaves your application. You can extend the defaults with custom rules.
+
+## Default Redaction Rules
+
+### Field Names
+
+These field names are always redacted in request/response bodies:
+
+`password`, `secret`, `token`, `authorization`, `api_key`, `credit_card`, `ssn`
+
+### Headers
+
+These headers are always redacted:
+
+`Authorization`, `Cookie`, `Set-Cookie`, `X-API-Key`
+
+### Patterns
+
+The SDK detects and redacts common patterns:
+
+- Credit card numbers (Visa, Mastercard, Amex patterns)
+- Email addresses in sensitive contexts
+- Social Security Number formats (XXX-XX-XXXX)
+
+## Adding Custom Rules
+
+Use the `TRACELY_REDACT_FIELDS` environment variable to add additional field names:
+
+```bash
+export TRACELY_REDACT_FIELDS="my_secret_field,internal_token,private_key"
+```
+
+> [!NOTE]
+> Custom rules are **additive** — default redaction rules still apply. You cannot disable built-in rules.
+
+## How Redaction Works
+
+```
+Request comes in
+    │
+    ├── SDK captures request/response bodies
+    │
+    ├── Redaction engine scans all fields
+    │   ├── Match field name → replace value with [REDACTED]
+    │   ├── Match header name → replace value with [REDACTED]
+    │   └── Match pattern → replace value with [REDACTED]
+    │
+    └── Only redacted data is sent to Tracely API
+```
+
+Sensitive data **never touches storage** — redaction happens in-process before any network transmission.
+
+## Example
+
+Before redaction:
+```json
+{
+  "user": "jane@example.com",
+  "password": "s3cret123",
+  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "order_id": "ORD-12345"
+}
+```
+
+After redaction:
+```json
+{
+  "user": "jane@example.com",
+  "password": "[REDACTED]",
+  "token": "[REDACTED]",
+  "order_id": "ORD-12345"
+}
+```

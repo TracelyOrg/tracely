@@ -1,0 +1,35 @@
+---
+title: Welcome to Tracely
+description: Real-time observability for Python applications.
+---
+
+## Introduction
+
+Tracely is an open-source observability platform built for Python developers. Get real-time monitoring, automatic instrumentation, and smart data redaction — all with a single line of code.
+
+## Quick Links
+
+<Cards>
+  <Card title="Quick Start" href="/docs/getting-started/quick-start">
+    Get monitoring in under 60 seconds.
+  </Card>
+  <Card title="FastAPI Guide" href="/docs/frameworks/fastapi">
+    Auto-instrument your FastAPI application.
+  </Card>
+  <Card title="Configuration" href="/docs/configuration/environment-variables">
+    Configure API keys, environments, and redaction.
+  </Card>
+  <Card title="Custom Spans" href="/docs/sdk-reference/custom-spans">
+    Add custom tracing to business-critical operations.
+  </Card>
+</Cards>
+
+## How It Works
+
+```
+SDK → OTLP/HTTP → Tracely API → Dashboard
+```
+
+1. **Install** the SDK: `pip install tracely`
+2. **Initialize** with one line: `tracely.init()`
+3. **Monitor** in the Pulse View dashboard — every request, query, and external call captured automatically.

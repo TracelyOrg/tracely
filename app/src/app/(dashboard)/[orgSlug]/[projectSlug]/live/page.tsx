@@ -565,6 +565,40 @@ export default function LivePage() {
   // The "active" span for row highlighting is either the highlighted span or the inspector span
   const activeSpanId = highlightedSpanId ?? inspectorSpanId;
 
+  // --- Resizable inspector panel ---
+  const [inspectorWidth, setInspectorWidth] = useState(40); // default 40%
+  const isDraggingRef = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isDraggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const pct = ((rect.width - x) / rect.width) * 100;
+      setInspectorWidth(Math.min(Math.max(pct, 20), 80));
+    }
+    function onMouseUp() {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  function startResize() {
+    isDraggingRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
   // Ref for returning focus to the stream list (AC4, UX3)
   const listContainerRef = useRef<HTMLDivElement>(null);
 
@@ -898,9 +932,12 @@ export default function LivePage() {
         onCustomStart={handleCustomStart}
         onCustomEnd={handleCustomEnd}
       />
-      <div className="relative flex flex-1 overflow-hidden">
-        {/* Stream list — compresses to 40% when inspector is open (AC1, UX2) */}
-        <div className={inspectorOpen ? "w-2/5 hidden md:block" : "w-full"}>
+      <div ref={containerRef} className="relative flex flex-1 overflow-hidden">
+        {/* Stream list — compresses when inspector is open */}
+        <div
+          className={inspectorOpen ? "hidden md:block" : "w-full"}
+          style={inspectorOpen ? { width: `${100 - inspectorWidth}%` } : undefined}
+        >
           <div className="relative h-full">
             <div
               ref={(el) => {
@@ -1026,18 +1063,30 @@ export default function LivePage() {
           </div>
         </div>
 
-        {/* Span Inspector panel — 60% on desktop, full overlay on mobile (AC1, UX2) */}
+        {/* Resize handle + Span Inspector panel */}
         {inspectorOpen && (
-          <div className="absolute inset-0 z-30 md:relative md:z-auto md:w-3/5">
-            <SpanInspector
-              detail={spanDetail}
-              loading={detailLoading}
-              error={detailError}
-              onClose={() => setInspectorSpanId(null)}
-              orgSlug={orgSlug}
-              projectSlug={projectSlug}
-            />
-          </div>
+          <>
+            {/* Drag handle */}
+            <div
+              onMouseDown={startResize}
+              className="hidden md:flex w-1.5 shrink-0 cursor-col-resize items-center justify-center hover:bg-primary/10 active:bg-primary/20 transition-colors"
+            >
+              <div className="h-8 w-0.5 rounded-full bg-border" />
+            </div>
+            <div
+              className="absolute inset-0 z-30 md:relative md:z-auto"
+              style={{ width: `${inspectorWidth}%` }}
+            >
+              <SpanInspector
+                detail={spanDetail}
+                loading={detailLoading}
+                error={detailError}
+                onClose={() => setInspectorSpanId(null)}
+                orgSlug={orgSlug}
+                projectSlug={projectSlug}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>

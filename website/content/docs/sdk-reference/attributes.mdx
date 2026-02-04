@@ -1,0 +1,46 @@
+---
+title: Attributes
+description: Attach key-value metadata to spans.
+---
+
+Attributes are key-value pairs attached to spans that provide additional context for debugging and analysis.
+
+## Usage
+
+```python
+import tracely
+
+with tracely.span("process-order") as span:
+    span.set_attribute("user.id", "123")
+    span.set_attribute("order.total", 59.99)
+    span.set_attribute("feature.flag", "new-checkout")
+```
+
+## Supported Value Types
+
+| Type | Example |
+|------|---------|
+| String | `span.set_attribute("user.id", "123")` |
+| Integer | `span.set_attribute("retry.count", 3)` |
+| Float | `span.set_attribute("order.total", 59.99)` |
+| Boolean | `span.set_attribute("cache.hit", True)` |
+
+## Common Attributes
+
+These are commonly used attribute keys:
+
+| Key | Description |
+|-----|-------------|
+| `user.id` | The user making the request |
+| `order.id` | Business entity identifier |
+| `feature.flag` | Feature flag name for A/B testing |
+| `error.message` | Error description when span represents a failure |
+| `db.statement` | Database query (auto-set by instrumentation) |
+| `http.url` | External URL called (auto-set by instrumentation) |
+
+## Redaction
+
+Attribute values are subject to the same [redaction rules](/docs/configuration/custom-redaction) as request/response bodies. If an attribute key matches a redaction pattern (e.g., `password`, `token`), the value is replaced with `[REDACTED]` before transmission.
+
+> [!WARNING]
+> Avoid putting raw sensitive data in attributes. While redaction rules catch common patterns, use generic identifiers (user IDs, order IDs) rather than PII (emails, names) when possible.

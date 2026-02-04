@@ -1,0 +1,61 @@
+---
+title: Django
+description: Auto-instrument your Django application.
+---
+
+Tracely auto-detects Django and instruments views, middleware, and ORM queries.
+
+## Setup
+
+Add `tracely.init()` to your `settings.py` or `wsgi.py`:
+
+```python title="settings.py"
+import tracely
+
+tracely.init()
+
+# ... rest of your Django settings
+```
+
+Or in your WSGI entry point:
+
+```python title="wsgi.py"
+import tracely
+
+tracely.init()
+
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
+```
+
+## How Auto-Detection Works
+
+The SDK detects Django by inspecting for `django.conf.settings` in the module system. Once detected, it:
+
+1. Wraps the WSGI/ASGI handler to capture all requests
+2. Instruments Django middleware stack
+3. Hooks into Django ORM for query capture
+4. Wraps external HTTP clients
+
+## What Gets Instrumented
+
+| Component | Details |
+|-----------|---------|
+| URL views | View function name, execution time |
+| Django middleware | Each middleware class with timing |
+| Django ORM | SQL queries, execution time |
+| External HTTP | httpx/requests calls to external APIs |
+| Template rendering | Template name, render time |
+
+## Example View
+
+```python
+from django.http import JsonResponse
+from myapp.models import User
+
+def get_user(request, user_id):
+    user = User.objects.get(id=user_id)  # Auto-captured
+    return JsonResponse({"name": user.name})
+```
+
+Every ORM query and view execution is automatically traced — no decorators needed.

@@ -1,0 +1,23 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "---Getting Started---",
+    "getting-started/overview",
+    "getting-started/installation",
+    "getting-started/quick-start",
+    "---Configuration---",
+    "configuration/environment-variables",
+    "configuration/custom-redaction",
+    "---Frameworks---",
+    "frameworks/fastapi",
+    "frameworks/django",
+    "frameworks/flask",
+    "---SDK Reference---",
+    "sdk-reference/init",
+    "sdk-reference/custom-spans",
+    "sdk-reference/attributes",
+    "---Dashboard---",
+    "dashboard/pulse-view",
+    "dashboard/trace-inspector"
+  ]
+}

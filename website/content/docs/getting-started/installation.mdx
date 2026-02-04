@@ -1,0 +1,30 @@
+---
+title: Installation
+description: Install the Tracely SDK in your Python project.
+---
+
+## Requirements
+
+- **Python 3.12+**
+- A Tracely account with an API key (format: `trly_...`)
+
+## Install
+
+```bash
+pip install tracely
+```
+
+## Verify
+
+```bash
+python -c "import tracely; print(tracely.__version__)"
+```
+
+You should see the installed version number printed to your terminal.
+
+> [!NOTE]
+> The Tracely SDK has zero runtime dependencies beyond your framework. It uses `httpx` for transport internally but adds no other packages to your dependency tree.
+
+## Next Steps
+
+Once installed, follow the [Quick Start](/docs/getting-started/quick-start) guide to start monitoring your application.

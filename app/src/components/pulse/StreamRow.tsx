@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { CheckCircle, XCircle, Loader, ChevronRight, ChevronDown } from "lucide-react";
+import { Loader } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SpanEvent } from "@/types/span";
 
@@ -7,15 +7,6 @@ function statusColorClass(code: number): string {
   if (code >= 200 && code < 300) return "text-emerald-500";
   if (code >= 400) return "text-red-500";
   return "text-muted-foreground";
-}
-
-function StatusIcon({ code }: { code: number }) {
-  const size = 14;
-  if (code >= 200 && code < 300)
-    return <CheckCircle size={size} className="text-emerald-500" aria-label="Status: healthy" role="img" />;
-  if (code >= 400)
-    return <XCircle size={size} className="text-red-500" aria-label="Status: error" role="img" />;
-  return null;
 }
 
 function formatTimestamp(isoString: string): string {
@@ -81,29 +72,39 @@ export const StreamRow = memo(function StreamRow({
         isSelected && "bg-accent"
       )}
     >
-      {/* Chevron toggle */}
-      <button
-        onClick={handleChevronClick}
-        className={cn(
-          "flex shrink-0 items-center justify-center w-4 h-4",
-          childCount === 0 && "invisible"
-        )}
-        tabIndex={-1}
-        aria-label={isExpanded ? "Collapse children" : "Expand children"}
-      >
-        {isExpanded ? (
-          <ChevronDown size={14} className="text-muted-foreground" />
-        ) : (
-          <ChevronRight size={14} className="text-muted-foreground" />
-        )}
-      </button>
+      {/* Timestamp (first column) */}
+      {!isPending && (
+        <span className="shrink-0 text-xs text-muted-foreground/70 tabular-nums">
+          {formatTimestamp(span.start_time)}
+        </span>
+      )}
+      {isPending && <span className="shrink-0 w-[5ch]" />}
 
       {/* Service name */}
       <span className="shrink-0 text-xs text-muted-foreground/70 w-16 truncate" title={serviceName}>
         {serviceName}
       </span>
 
-      {/* Method + Path as single string */}
+      {/* Child count badge (replaces chevron toggle) */}
+      {!isPending && childCount > 0 ? (
+        <button
+          onClick={handleChevronClick}
+          className={cn(
+            "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums",
+            statusColorClass(span.http_status_code),
+            "border",
+            span.http_status_code >= 400 ? "border-red-500/30" : span.http_status_code >= 200 && span.http_status_code < 300 ? "border-emerald-500/30" : "border-border"
+          )}
+          tabIndex={-1}
+          aria-label={isExpanded ? "Collapse children" : "Expand children"}
+        >
+          {childCount}
+        </button>
+      ) : (
+        <span className="shrink-0 w-5" />
+      )}
+
+      {/* Method + Status Code + Path */}
       <span className="min-w-0 flex-1 truncate text-foreground">
         {isPending ? (
           <span className="flex items-center gap-1.5">
@@ -113,38 +114,15 @@ export const StreamRow = memo(function StreamRow({
             <span className="text-xs text-muted-foreground">In Progress</span>
           </span>
         ) : (
-          `${method} ${route}`
+          <span className="flex items-center gap-1.5">
+            <span className={cn("text-xs font-medium", statusColorClass(span.http_status_code))}>
+              {span.http_status_code}
+            </span>
+            <span>{method}</span>
+            <span className="truncate">{route}</span>
+          </span>
         )}
       </span>
-
-      {/* Child count badge */}
-      {!isPending && childCount > 0 && (
-        <span
-          className={cn(
-            "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-medium tabular-nums",
-            hasErrorChildren
-              ? "bg-red-500 text-white"
-              : "bg-muted text-muted-foreground"
-          )}
-        >
-          {childCount}
-        </span>
-      )}
-
-      {/* Status Code */}
-      {!isPending && (
-        <span className={cn("flex shrink-0 items-center gap-1 text-xs font-medium", statusColorClass(span.http_status_code))}>
-          <StatusIcon code={span.http_status_code} />
-          <span>{span.http_status_code}</span>
-        </span>
-      )}
-
-      {/* Timestamp */}
-      {!isPending && (
-        <span className="shrink-0 text-xs text-muted-foreground/70 tabular-nums">
-          {formatTimestamp(span.start_time)}
-        </span>
-      )}
 
       {/* Duration */}
       {!isPending && (

@@ -1,0 +1,58 @@
+---
+title: Quick Start
+description: Start monitoring your Python app in under 60 seconds.
+---
+
+Get from zero to full observability in four steps.
+
+## Step 1: Install
+
+```bash
+pip install tracely
+```
+
+## Step 2: Set Your API Key
+
+```bash
+export TRACELY_API_KEY="trly_your_key_here"
+```
+
+You can find your API key in the Tracely dashboard under **Settings → API Keys**. Keys are shown once on creation — store it securely.
+
+## Step 3: Add to Your App
+
+```python
+import tracely
+
+tracely.init()
+```
+
+Add these two lines at the top of your application entry point — before your framework initializes. That's all the code you need.
+
+## Step 4: Run and Monitor
+
+Start your application as usual:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Open the **Pulse View** in your Tracely dashboard. You'll see every request appear in real-time as traffic flows through your app.
+
+> [!NOTE]
+> That's it! Every HTTP request is now automatically captured, along with database queries, external HTTP calls, and middleware execution — all with automatic PII redaction.
+
+## What Gets Captured
+
+| What | How |
+|------|-----|
+| HTTP requests | Routes, status codes, request/response bodies |
+| Database queries | SQLAlchemy queries with timing |
+| External calls | httpx/requests calls to external APIs |
+| Middleware | ASGI/WSGI middleware execution |
+
+## Next Steps
+
+- [Configure environment variables](/docs/configuration/environment-variables)
+- [Set up custom redaction rules](/docs/configuration/custom-redaction)
+- [Framework-specific guides](/docs/frameworks/fastapi)

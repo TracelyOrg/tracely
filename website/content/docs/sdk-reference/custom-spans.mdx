@@ -1,0 +1,75 @@
+---
+title: Custom Spans
+description: Create custom spans for business-critical operations.
+---
+
+Use `tracely.span()` to add custom tracing to operations that aren't automatically captured.
+
+## Context Manager
+
+```python
+import tracely
+
+with tracely.span("process-order"):
+    validate_order(order)
+    charge_payment(order.total)
+    send_confirmation(order.email)
+```
+
+The span is automatically created when entering the `with` block and ended when exiting. It becomes a child of the currently active span (e.g., the HTTP request span).
+
+## Setting Attributes
+
+Add key-value metadata to spans:
+
+```python
+with tracely.span("process-order") as span:
+    span.set_attribute("order.id", order.id)
+    span.set_attribute("order.total", order.total)
+    span.set_attribute("user.id", order.user_id)
+    charge_payment(order.total)
+```
+
+Attributes appear in the Trace Inspector alongside the span.
+
+## Nesting Spans
+
+Spans nest automatically based on the call stack:
+
+```python
+with tracely.span("process-order"):
+    validate_order(order)
+
+    with tracely.span("charge-payment"):
+        result = stripe.charge(order.total)
+
+    with tracely.span("send-confirmation"):
+        send_email(order.email)
+```
+
+This produces a trace tree:
+
+```
+▼ POST /orders                          201  234ms
+  └─ process-order                            220ms
+       ├─ charge-payment                      180ms
+       └─ send-confirmation                    35ms
+```
+
+## Log Capture
+
+Logs emitted within a span context are automatically associated with that span:
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+
+with tracely.span("import-data"):
+    logger.info("Starting import")  # Attached to import-data span
+    process_csv(file)
+    logger.info("Import complete")  # Attached to import-data span
+```
+
+> [!NOTE]
+> Attribute values are subject to [redaction rules](/docs/configuration/custom-redaction). If you set an attribute with a sensitive value, it will be automatically redacted.
