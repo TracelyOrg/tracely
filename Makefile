@@ -1,4 +1,4 @@
-.PHONY: up down infra api app test migrate lint dev
+.PHONY: up down infra api app test migrate lint dev sdk-install sdk-example
 
 # ── Infrastructure ──────────────────────────────────────────
 infra:
@@ -42,8 +42,18 @@ test-api:
 lint:
 	cd app && npx tsc --noEmit
 
+# ── SDK (delegates to tracely-sdk/Makefile) ───────────────
+sdk-install:
+	$(MAKE) -C ../tracely-sdk install
+
+sdk-example:
+	$(MAKE) -C ../tracely-sdk example TRACELY_API_KEY=$(TRACELY_API_KEY)
+
+sdk-test:
+	$(MAKE) -C ../tracely-sdk test
+
 # ── Combo Commands ─────────────────────────────────────────
 dev: infra
 	@echo "Infrastructure up. Run 'make api' and 'make app' in separate terminals."
 
-install: api-install app-install
+install: api-install app-install sdk-install

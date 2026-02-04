@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useParams } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, Radio, BookOpen, ArrowDown } from "lucide-react";
+import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import type { SpanEvent } from "@/types/span";
@@ -19,6 +19,22 @@ interface ProjectInfo {
   name: string;
   slug: string;
   org_id: string;
+  created_at: string;
+}
+
+interface ApiKeyItem {
+  id: string;
+  prefix: string;
+  name: string | null;
+  last_used_at: string | null;
+  created_at: string;
+}
+
+interface ApiKeyCreatedResponse {
+  id: string;
+  key: string;
+  prefix: string;
+  name: string | null;
   created_at: string;
 }
 
@@ -50,25 +66,128 @@ function PulseSkeleton() {
   );
 }
 
+// --- Helpers for Empty State ---
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+function CodeBlock({ code, language }: { code: string; language?: string }) {
+  return (
+    <div className="rounded-lg border bg-muted/50">
+      <div className="flex items-center justify-between border-b px-3 py-1.5">
+        <span className="text-xs text-muted-foreground font-mono">
+          {language || "shell"}
+        </span>
+        <CopyButton text={code} />
+      </div>
+      <pre className="overflow-x-auto p-3">
+        <code className="text-sm font-mono">{code}</code>
+      </pre>
+    </div>
+  );
+}
+
 // --- Empty State (AC4, UX6) ---
 
 function EmptyState({ orgSlug, projectSlug }: { orgSlug: string; projectSlug: string }) {
+  const [fullKey, setFullKey] = useState<string | null>(null);
+  const [keyPrefix, setKeyPrefix] = useState<string | null>(null);
+  const generatedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const basePath = `/api/orgs/${orgSlug}/projects/${projectSlug}/api-keys`;
+
+    async function loadOrCreateKey() {
+      try {
+        const res = await apiFetch<DataEnvelope<ApiKeyItem[]>>(basePath);
+        if (cancelled) return;
+
+        if (res.data.length > 0) {
+          // Existing key — only prefix available
+          setKeyPrefix(res.data[0].prefix);
+        } else if (!generatedRef.current) {
+          // No keys yet — auto-generate one to show the full key
+          generatedRef.current = true;
+          const created = await apiFetch<DataEnvelope<ApiKeyCreatedResponse>>(
+            basePath,
+            { method: "POST", body: JSON.stringify({ name: "Default" }) }
+          );
+          if (!cancelled) {
+            setFullKey(created.data.key);
+            setKeyPrefix(created.data.prefix);
+          }
+        }
+      } catch {
+        // Non-blocking
+      }
+    }
+
+    loadOrCreateKey();
+    return () => { cancelled = true; };
+  }, [orgSlug, projectSlug]);
+
+  const displayKey = fullKey ?? (keyPrefix ? `${keyPrefix}...` : "your_api_key_here");
+  const installSnippet = `pip install tracely-sdk
+export TRACELY_API_KEY="${displayKey}"`;
+
+  const configSnippet = `import tracely
+
+tracely.init()  # reads TRACELY_API_KEY from env`;
+
   return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <Radio className="mx-auto size-10 text-muted-foreground/50" />
-        <h3 className="mt-4 text-lg font-medium">No requests yet</h3>
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Once your application sends requests through the Tracely SDK, they
-          will appear here in real time.
-        </p>
-        <a
-          href={`/${orgSlug}/${projectSlug}/onboarding`}
-          className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-        >
-          <BookOpen className="size-4" />
-          Go to setup guide
-        </a>
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="w-full max-w-lg space-y-5">
+        <div className="text-center">
+          <h3 className="text-lg font-medium">Get started</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Install the SDK and send your first event to see it here in real time.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Terminal className="size-4 text-muted-foreground" />
+            1. Install &amp; configure
+          </div>
+          <CodeBlock code={installSnippet} language="shell" />
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Code className="size-4 text-muted-foreground" />
+            2. Add to your app
+          </div>
+          <CodeBlock code={configSnippet} language="python" />
+        </div>
+
+        <div className="text-center">
+          <a
+            href={`/${orgSlug}/${projectSlug}/onboarding`}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            <BookOpen className="size-4" />
+            Full setup guide
+          </a>
+        </div>
       </div>
     </div>
   );

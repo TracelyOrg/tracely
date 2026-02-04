@@ -96,9 +96,14 @@ describe("PulseView Page", () => {
     expect(pulsingElements.length).toBeGreaterThan(0);
   });
 
-  it("shows empty state when connected with no spans (AC4, UX6)", async () => {
-    mockApiFetch.mockResolvedValue({
-      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+  it("shows empty state with SDK install instructions when connected with no spans (AC4, UX6)", async () => {
+    mockApiFetch.mockImplementation((url: string) => {
+      if (url.includes("/api-keys")) {
+        return Promise.resolve({ data: [{ id: "k1", prefix: "trly_abc", name: null, last_used_at: null, created_at: "" }] });
+      }
+      return Promise.resolve({
+        data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+      });
     });
     mockUseEventStream.mockReturnValue({
       status: "connected",
@@ -107,13 +112,12 @@ describe("PulseView Page", () => {
 
     render(<LivePage />);
 
-    // Wait for project load to complete
-    await screen.findByText("No requests yet");
+    await screen.findByText("Get started");
 
-    expect(screen.getByText("No requests yet")).toBeInTheDocument();
-    expect(screen.getByText("Go to setup guide")).toBeInTheDocument();
+    expect(screen.getByText(/pip install tracely-sdk/)).toBeInTheDocument();
+    expect(screen.getByText("Full setup guide")).toBeInTheDocument();
     expect(
-      screen.getByText("Go to setup guide").getAttribute("href")
+      screen.getByText("Full setup guide").getAttribute("href")
     ).toBe("/test-org/test-project/onboarding");
   });
 
@@ -249,8 +253,16 @@ describe("PulseView Page", () => {
   });
 
   it("does NOT show 'Back to Live' button when no spans", async () => {
-    mockApiFetch.mockResolvedValue({
-      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+    mockApiFetch.mockImplementation((url: string, opts?: { method?: string }) => {
+      if (url.includes("/api-keys") && opts?.method === "POST") {
+        return Promise.resolve({ data: { id: "k1", key: "trly_test_full_key", prefix: "trly_test", name: null, created_at: "" } });
+      }
+      if (url.includes("/api-keys")) {
+        return Promise.resolve({ data: [] });
+      }
+      return Promise.resolve({
+        data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
+      });
     });
     mockUseEventStream.mockReturnValue({
       status: "connected",
@@ -262,7 +274,7 @@ describe("PulseView Page", () => {
 
     render(<LivePage />);
 
-    await screen.findByText("No requests yet");
+    await screen.findByText("Get started");
     expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();
   });
 });
