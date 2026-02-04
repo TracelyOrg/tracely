@@ -209,7 +209,9 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
 
         <div className="text-center">
           <a
-            href={`/${orgSlug}/${projectSlug}/onboarding`}
+            href="https://tracely.sh/docs"
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <BookOpen className="size-4" />

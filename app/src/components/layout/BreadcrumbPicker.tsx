@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Home } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import { useFilterStore } from "@/stores/filterStore";
@@ -141,36 +142,50 @@ export default function BreadcrumbPicker({
 
   return (
     <div className="flex items-center gap-1">
-      {/* Org picker */}
-      <div className="relative" ref={orgRef}>
-        <button
-          type="button"
-          onClick={() => setOrgOpen((prev) => !prev)}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
-        >
-          <span className="max-w-[160px] truncate">
-            {currentOrg?.name ?? "Select organization"}
-          </span>
-          <ChevronDown open={orgOpen} />
-        </button>
+      {/* Home link */}
+      <button
+        type="button"
+        onClick={() => router.push("/")}
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+        aria-label="Home"
+      >
+        <Home className="size-4" />
+      </button>
 
-        {orgOpen && orgs.length > 0 && (
-          <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-md border bg-popover p-1 shadow-md">
-            {orgs.map((org) => (
-              <button
-                key={org.id}
-                type="button"
-                onClick={() => handleSwitchOrg(org.slug)}
-                className={`flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent ${
-                  org.slug === currentOrgSlug ? "bg-accent font-medium" : ""
-                }`}
-              >
-                {org.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      {currentOrgSlug && <span className="text-muted-foreground">/</span>}
+
+      {/* Org picker */}
+      {currentOrgSlug && (
+        <div className="relative" ref={orgRef}>
+          <button
+            type="button"
+            onClick={() => setOrgOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+          >
+            <span className="max-w-[160px] truncate">
+              {currentOrg?.name ?? "Select organization"}
+            </span>
+            <ChevronDown open={orgOpen} />
+          </button>
+
+          {orgOpen && orgs.length > 0 && (
+            <div className="absolute left-0 top-full z-50 mt-1 min-w-[200px] rounded-md border bg-popover p-1 shadow-md">
+              {orgs.map((org) => (
+                <button
+                  key={org.id}
+                  type="button"
+                  onClick={() => handleSwitchOrg(org.slug)}
+                  className={`flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent ${
+                    org.slug === currentOrgSlug ? "bg-accent font-medium" : ""
+                  }`}
+                >
+                  {org.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Separator + Project picker (only when org is selected and projects exist) */}
       {currentOrgSlug && (

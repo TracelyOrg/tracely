@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_role
 from app.models.user import User
-from app.schemas.organization import OrgCreate, OrgMemberOut, OrgOut
+from app.schemas.organization import OrgCreate, OrgMemberOut, OrgOut, OrgUpdate
 from app.services import org_service
 from app.utils.envelope import success
 
@@ -35,9 +35,20 @@ async def list_orgs(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """List all organizations the current user belongs to."""
-    orgs = await org_service.list_user_organizations(db, current_user.id)
+    enriched = await org_service.list_user_organizations(db, current_user.id)
     return success(
-        [OrgOut.model_validate(o).model_dump(mode="json") for o in orgs]
+        [
+            OrgOut(
+                id=item.org.id,
+                name=item.org.name,
+                slug=item.org.slug,
+                member_count=item.member_count,
+                project_count=item.project_count,
+                user_role=item.user_role,
+                created_at=item.org.created_at,
+            ).model_dump(mode="json")
+            for item in enriched
+        ]
     )
 
 
@@ -65,4 +76,32 @@ async def get_org(
 
         raise ForbiddenError("Not a member of this organization")
 
-    return success(OrgOut.model_validate(org).model_dump(mode="json"))
+    return success(
+        OrgOut(
+            id=org.id,
+            name=org.name,
+            slug=org.slug,
+            user_role=member.role,
+            created_at=org.created_at,
+        ).model_dump(mode="json")
+    )
+
+
+@router.put("/{org_slug}/settings")
+async def update_org_settings(
+    org_slug: str,
+    data: OrgUpdate,
+    current_user: User = Depends(require_role("admin")),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Update organization settings. Admin only."""
+    org = await org_service.get_org_by_slug(db, org_slug)
+    updated = await org_service.update_organization(db, org.id, data)
+    return success(
+        OrgOut(
+            id=updated.id,
+            name=updated.name,
+            slug=updated.slug,
+            created_at=updated.created_at,
+        ).model_dump(mode="json")
+    )

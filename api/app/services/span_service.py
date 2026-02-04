@@ -178,6 +178,7 @@ async def get_span_by_id(
         " WHERE org_id = %(org_id)s"
         " AND project_id = %(project_id)s"
         " AND span_id = %(span_id)s"
+        " AND span_type = 'span'"
         " LIMIT 1"
     )
 

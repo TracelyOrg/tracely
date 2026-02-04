@@ -14,6 +14,7 @@ interface AuthUser {
     email: string;
     full_name: string | null;
     onboarding_completed: boolean;
+    email_verified: boolean;
     created_at: string;
   };
 }
@@ -89,41 +90,63 @@ export default function DashboardLayout({
         const authRes = await apiFetch<DataEnvelope<AuthUser>>("/api/auth/me");
         if (cancelled) return;
 
-        const orgsRes = await apiFetch<DataEnvelope<OrgItem[]>>("/api/orgs");
-        if (cancelled) return;
-
-        setAuthenticated(true);
-
-        if (orgsRes.data.length === 0 && !onOnboarding) {
-          router.replace("/onboarding/create-org");
+        if (!authRes.data.user.email_verified) {
+          router.replace(
+            `/verify-email?email=${encodeURIComponent(authRes.data.user.email)}`
+          );
           return;
         }
 
-        // Redirect to onboarding wizard if not completed (Task 8.4)
-        if (
-          !authRes.data.user.onboarding_completed &&
-          orgsRes.data.length > 0 &&
-          !onOnboarding
-        ) {
-          const firstOrg = orgsRes.data[0];
+        setAuthenticated(true);
+
+        // Auto-accept pending invitation from sessionStorage (Story 6-5)
+        const pendingToken = sessionStorage.getItem("invitation_token");
+        if (pendingToken) {
+          sessionStorage.removeItem("invitation_token");
           try {
-            const projRes = await apiFetch<DataEnvelope<ProjectItem[]>>(
-              `/api/orgs/${firstOrg.slug}/projects`
-            );
-            if (cancelled) return;
-            if (projRes.data.length > 0) {
-              const firstProject = projRes.data[0];
-              router.replace(
-                `/${firstOrg.slug}/${firstProject.slug}/onboarding`
-              );
-            } else {
-              // Org exists but no projects — redirect to project creation
-              router.replace(
-                `/onboarding/create-project?org=${firstOrg.slug}`
-              );
+            const acceptRes = await apiFetch<
+              DataEnvelope<{ org_slug: string; org_name: string }>
+            >("/api/invitations/accept", {
+              method: "POST",
+              body: JSON.stringify({ token: pendingToken }),
+            });
+            if (!cancelled) {
+              router.replace(`/${acceptRes.data.org_slug}`);
+              return;
             }
           } catch {
-            // Non-blocking — if projects fail to load, don't redirect
+            // Non-blocking — if accept fails, continue normally
+          }
+        }
+
+        // Redirect to onboarding wizard if not completed and on a specific org/project page
+        if (
+          !authRes.data.user.onboarding_completed &&
+          !onOnboarding &&
+          pathname !== "/"
+        ) {
+          try {
+            const orgsRes = await apiFetch<DataEnvelope<OrgItem[]>>("/api/orgs");
+            if (cancelled) return;
+            if (orgsRes.data.length > 0) {
+              const firstOrg = orgsRes.data[0];
+              const projRes = await apiFetch<DataEnvelope<ProjectItem[]>>(
+                `/api/orgs/${firstOrg.slug}/projects`
+              );
+              if (cancelled) return;
+              if (projRes.data.length > 0) {
+                const firstProject = projRes.data[0];
+                router.replace(
+                  `/${firstOrg.slug}/${firstProject.slug}/onboarding`
+                );
+              } else {
+                router.replace(
+                  `/onboarding/create-project?org=${firstOrg.slug}`
+                );
+              }
+            }
+          } catch {
+            // Non-blocking — if loading fails, don't redirect
           }
         }
       } catch {

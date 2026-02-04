@@ -25,6 +25,7 @@ dependencies = [
     "email-validator>=2.0",
     "opentelemetry-proto>=1.20",
     "protobuf>=4.25",
+    "resend>=2.0",
 ]
 
 [project.optional-dependencies]

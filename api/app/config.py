@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     jwt_secret: str = "change-me-in-production"
     cors_origins: list[str] = ["http://localhost:3000"]
+    resend_api_key: str = ""
+    resend_from_email: str = "noreply@tracely.sh"
+    frontend_url: str = "http://localhost:3000"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

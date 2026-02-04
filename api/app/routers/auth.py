@@ -6,7 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.postgres import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, UserCreate, UserOut
+from app.schemas.auth import (
+    AuthResponse,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterResponse,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    UserCreate,
+    UserOut,
+    VerifyEmailRequest,
+)
 from app.services import auth_service
 from app.utils.envelope import success
 from app.utils.security import (
@@ -51,18 +61,16 @@ def _clear_auth_cookies(response: Response) -> None:
 @router.post("/register", status_code=201)
 async def register(
     data: UserCreate,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     user = await auth_service.register_user(db, data)
 
-    access_token = create_access_token(str(user.id))
-    refresh_token = create_refresh_token(str(user.id))
-
-    _set_auth_cookies(response, access_token, refresh_token)
-
-    user_out = UserOut.model_validate(user)
-    return success(AuthResponse(user=user_out).model_dump())
+    return success(
+        RegisterResponse(
+            message="Please check your email to verify your account",
+            email=user.email,
+        ).model_dump()
+    )
 
 
 @router.post("/login")
@@ -111,6 +119,58 @@ async def logout(
     _clear_auth_cookies(response)
 
     return success({"message": "Logged out"})
+
+
+@router.post("/verify-email")
+async def verify_email(
+    data: VerifyEmailRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user = await auth_service.verify_email(db, data.token)
+
+    access_token = create_access_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id))
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    user_out = UserOut.model_validate(user)
+    return success(AuthResponse(user=user_out).model_dump())
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    data: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    await auth_service.resend_verification(db, data.email)
+
+    return success({"message": "If the email exists and is unverified, a new link has been sent"})
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    data: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    await auth_service.forgot_password(db, data.email)
+
+    return success({"message": "If an account with that email exists, a reset link has been sent"})
+
+
+@router.post("/reset-password")
+async def reset_password(
+    data: ResetPasswordRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    user = await auth_service.reset_password(db, data.token, data.password)
+
+    access_token = create_access_token(str(user.id))
+    refresh_token = create_refresh_token(str(user.id))
+    _set_auth_cookies(response, access_token, refresh_token)
+
+    user_out = UserOut.model_validate(user)
+    return success(AuthResponse(user=user_out).model_dump())
 
 
 @router.get("/me")

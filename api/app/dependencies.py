@@ -36,9 +36,17 @@ async def get_current_user(
     return user
 
 
+async def require_verified_user(
+    user: User = Depends(get_current_user),
+) -> User:
+    if not user.email_verified:
+        raise ForbiddenError("Email not verified")
+    return user
+
+
 async def get_current_org(
     org_slug: str = Path(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_verified_user),
     db: AsyncSession = Depends(get_db),
 ) -> uuid.UUID:
     """Resolve org from URL path param and verify user membership.

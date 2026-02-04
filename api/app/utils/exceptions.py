@@ -21,3 +21,11 @@ class ForbiddenError(AppError):
 
 class UnauthorizedError(AppError):
     pass
+
+
+class BadRequestError(AppError):
+    pass
+
+
+class TooManyRequestsError(AppError):
+    pass

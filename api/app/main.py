@@ -11,12 +11,14 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
-from app.routers import api_keys, auth, health, ingest, organizations, projects, spans, stream
+from app.routers import api_keys, auth, health, ingest, invitations, members, organizations, projects, spans, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
+    BadRequestError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
+    TooManyRequestsError,
     UnauthorizedError,
 )
 
@@ -49,6 +51,24 @@ def create_app() -> FastAPI:
     app.include_router(spans.router)
     app.include_router(stream.router)
     app.include_router(ingest.router)
+    app.include_router(invitations.router)
+    app.include_router(members.router)
+
+    @app.exception_handler(BadRequestError)
+    async def bad_request_handler(request: Request, exc: BadRequestError) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content=error("BAD_REQUEST", exc.message),
+        )
+
+    @app.exception_handler(TooManyRequestsError)
+    async def too_many_requests_handler(
+        request: Request, exc: TooManyRequestsError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content=error("TOO_MANY_REQUESTS", exc.message),
+        )
 
     @app.exception_handler(ConflictError)
     async def conflict_handler(request: Request, exc: ConflictError) -> JSONResponse:

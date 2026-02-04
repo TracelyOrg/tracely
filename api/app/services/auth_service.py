@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 import hashlib
+import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = logging.getLogger(__name__)
+
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.schemas.auth import LoginRequest, UserCreate
-from app.utils.exceptions import ConflictError, UnauthorizedError
+from app.services.email_service import send_password_reset_email, send_verification_email
+from app.utils.exceptions import (
+    BadRequestError,
+    ConflictError,
+    TooManyRequestsError,
+    UnauthorizedError,
+)
 from app.utils.security import (
     REFRESH_TOKEN_EXPIRE_DAYS,
     create_access_token,
@@ -19,6 +29,10 @@ from app.utils.security import (
     verify_token,
 )
 
+VERIFICATION_TOKEN_EXPIRY_HOURS = 24
+PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
+RESEND_COOLDOWN_SECONDS = 60
+
 
 async def register_user(db: AsyncSession, data: UserCreate) -> User:
     result = await db.execute(select(User).where(User.email == data.email))
@@ -26,15 +40,80 @@ async def register_user(db: AsyncSession, data: UserCreate) -> User:
     if existing is not None:
         raise ConflictError("Email already registered")
 
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
+        email_verified=False,
+        email_verification_token=token_hash,
+        email_verification_sent_at=datetime.now(timezone.utc),
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    await send_verification_email(user.email, token)
+
     return user
+
+
+async def verify_email(db: AsyncSession, token: str) -> User:
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    result = await db.execute(
+        select(User).where(User.email_verification_token == token_hash)
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise BadRequestError("Invalid verification token")
+
+    if user.email_verified:
+        raise BadRequestError("Email already verified")
+
+    if user.email_verification_sent_at is not None:
+        expiry = user.email_verification_sent_at + timedelta(
+            hours=VERIFICATION_TOKEN_EXPIRY_HOURS
+        )
+        if datetime.now(timezone.utc) > expiry:
+            raise BadRequestError("Verification link has expired")
+
+    user.email_verified = True
+    user.email_verification_token = None
+    user.email_verification_sent_at = None
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def resend_verification(db: AsyncSession, email: str) -> None:
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        return
+
+    if user.email_verified:
+        return
+
+    if user.email_verification_sent_at is not None:
+        cooldown = user.email_verification_sent_at + timedelta(
+            seconds=RESEND_COOLDOWN_SECONDS
+        )
+        if datetime.now(timezone.utc) < cooldown:
+            raise TooManyRequestsError("Please wait before requesting again")
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    user.email_verification_token = token_hash
+    user.email_verification_sent_at = datetime.now(timezone.utc)
+    db.add(user)
+    await db.commit()
+
+    await send_verification_email(user.email, token)
 
 
 def _hash_token(token: str) -> str:
@@ -106,3 +185,57 @@ async def logout_user(db: AsyncSession, refresh_token: str) -> None:
         .values(is_revoked=True)
     )
     await db.commit()
+
+
+async def forgot_password(db: AsyncSession, email: str) -> None:
+    print(f"[forgot_password] called for email={email}")
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user is None:
+        print(f"[forgot_password] no user found for email={email}")
+        return
+
+    if user.password_reset_sent_at is not None:
+        cooldown = user.password_reset_sent_at + timedelta(
+            seconds=RESEND_COOLDOWN_SECONDS
+        )
+        if datetime.now(timezone.utc) < cooldown:
+            print(f"[forgot_password] cooldown active for email={email}")
+            raise TooManyRequestsError("Please wait before requesting again")
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    user.password_reset_token = token_hash
+    user.password_reset_sent_at = datetime.now(timezone.utc)
+    db.add(user)
+    await db.commit()
+
+    print(f"[forgot_password] token stored, sending email to {user.email}")
+    await send_password_reset_email(user.email, token)
+
+
+async def reset_password(db: AsyncSession, token: str, new_password: str) -> User:
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    result = await db.execute(
+        select(User).where(User.password_reset_token == token_hash)
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise BadRequestError("Invalid or expired reset token")
+
+    if user.password_reset_sent_at is not None:
+        expiry = user.password_reset_sent_at + timedelta(
+            hours=PASSWORD_RESET_TOKEN_EXPIRY_HOURS
+        )
+        if datetime.now(timezone.utc) > expiry:
+            raise BadRequestError("Reset link has expired")
+
+    user.password_hash = hash_password(new_password)
+    user.password_reset_token = None
+    user.password_reset_sent_at = None
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user

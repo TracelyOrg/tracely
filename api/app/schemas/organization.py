@@ -10,10 +10,17 @@ class OrgCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=50)
 
 
+class OrgUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+
+
 class OrgOut(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    member_count: int = 0
+    project_count: int = 0
+    user_role: str = "member"
     created_at: datetime
 
     model_config = {"from_attributes": True}

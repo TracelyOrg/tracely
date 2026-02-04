@@ -25,6 +25,21 @@ class User(Base):
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    email_verification_token: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    email_verification_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    password_reset_token: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    password_reset_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
