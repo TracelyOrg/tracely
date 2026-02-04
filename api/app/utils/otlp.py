@@ -146,17 +146,61 @@ def extract_spans(
                 )
                 http_status_code = int(http_status_str) if http_status_str.isdigit() else 0
 
-                # Extract request/response data
-                request_body = _get_attr(span_attrs, "tracely.request.body")
-                response_body = _get_attr(span_attrs, "tracely.response.body")
-                request_headers = _get_attr(span_attrs, "tracely.request.headers")
-                response_headers = _get_attr(span_attrs, "tracely.response.headers")
+                # Extract request/response data (support both tracely.* and http.* keys)
+                request_body = (
+                    _get_attr(span_attrs, "tracely.request.body")
+                    or _get_attr(span_attrs, "http.request.body")
+                )
+                response_body = (
+                    _get_attr(span_attrs, "tracely.response.body")
+                    or _get_attr(span_attrs, "http.response.body")
+                )
+                request_headers = (
+                    _get_attr(span_attrs, "tracely.request.headers")
+                    or _get_attr(span_attrs, "http.request.headers")
+                )
+                response_headers = (
+                    _get_attr(span_attrs, "tracely.response.headers")
+                    or _get_attr(span_attrs, "http.response.headers")
+                )
 
-                # Remove tracely-specific attrs from the general attributes map
+                # Build headers from individual OTEL http.request.header.* /
+                # http.response.header.* attributes if no JSON blob was found.
+                if not request_headers:
+                    req_hdr = {
+                        k.removeprefix("http.request.header."): v
+                        for k, v in span_attrs.items()
+                        if k.startswith("http.request.header.")
+                    }
+                    if req_hdr:
+                        request_headers = json.dumps(req_hdr)
+
+                if not response_headers:
+                    resp_hdr = {
+                        k.removeprefix("http.response.header."): v
+                        for k, v in span_attrs.items()
+                        if k.startswith("http.response.header.")
+                    }
+                    if resp_hdr:
+                        response_headers = json.dumps(resp_hdr)
+
+                # Keys that have been promoted to dedicated columns — strip from
+                # the general attributes map to avoid duplication.
+                _extracted_keys = {
+                    "tracely.request.body", "http.request.body",
+                    "tracely.response.body", "http.response.body",
+                    "tracely.request.headers", "http.request.headers",
+                    "tracely.response.headers", "http.response.headers",
+                }
+
+                # Remove tracely-specific attrs and already-extracted keys
                 general_attrs = {
                     k: v
                     for k, v in span_attrs.items()
                     if not k.startswith("tracely.")
+                    and k not in _extracted_keys
+                    and not k.startswith("http.request.header.")
+                    and not k.startswith("http.response.header.")
                 }
 
                 # Extract span events (OTLP log events) and store as JSON
@@ -164,7 +208,8 @@ def extract_spans(
                     events_list = []
                     for event in otlp_span.events:
                         event_attrs = _extract_attributes(event.attributes)
-                        events_list.append({
+
+                        event_record: dict[str, str] = {
                             "timestamp": _nanos_to_datetime(
                                 event.time_unix_nano
                             ).isoformat(),
@@ -173,8 +218,41 @@ def extract_spans(
                             "message": _get_attr(
                                 event_attrs, "message", event.name
                             ),
-                        })
+                        }
+
+                        # Promote standard OTEL exception attributes from
+                        # exception events to span-level general_attrs so the
+                        # frontend can display them.
+                        if event.name == "exception":
+                            for exc_key in (
+                                "exception.type",
+                                "exception.message",
+                                "exception.stacktrace",
+                            ):
+                                val = _get_attr(event_attrs, exc_key)
+                                if val and exc_key not in general_attrs:
+                                    general_attrs[exc_key] = val
+                            # Also include in the event record for reference
+                            event_record["exception.type"] = _get_attr(
+                                event_attrs, "exception.type"
+                            )
+                            event_record["exception.message"] = _get_attr(
+                                event_attrs, "exception.message"
+                            )
+
+                        events_list.append(event_record)
                     general_attrs["span.events"] = json.dumps(events_list)
+
+                # Bridge error.* → exception.* (RC3: SDK sets error.type /
+                # error.message, frontend reads exception.type / exception.message)
+                if "exception.type" not in general_attrs:
+                    err_type = general_attrs.get("error.type", "")
+                    if err_type:
+                        general_attrs["exception.type"] = err_type
+                if "exception.message" not in general_attrs:
+                    err_msg = general_attrs.get("error.message", "")
+                    if err_msg:
+                        general_attrs["exception.message"] = err_msg
 
                 span_row: dict[str, Any] = {
                     "org_id": str(org_id),

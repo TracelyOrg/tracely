@@ -11,6 +11,8 @@ import {
   CheckCircle,
   XCircle,
   ClipboardCopy,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SpanDetail } from "@/types/span";
@@ -30,7 +32,7 @@ interface SpanInspectorProps {
   projectSlug: string;
 }
 
-type TabId = "request" | "response" | "exceptions" | "trace";
+type TabId = "request" | "response" | "trace";
 
 // --- Helpers ---
 
@@ -247,13 +249,79 @@ function RequestTab({ detail }: { detail: SpanDetail }) {
         </h4>
         <BodyBlock body={detail.request_body} label="Request Body" />
       </div>
+
+      {/* Span Attributes (collapsible) */}
+      <SpanAttributesCollapsible attributes={detail.attributes} />
     </div>
   );
 }
 
-// --- Response Tab (AC3) ---
+// --- Collapsible Span Attributes ---
+
+/** Keys already displayed elsewhere — filter them out from the attributes section. */
+const DISPLAYED_ELSEWHERE_PREFIXES = [
+  "http.request.query.",
+  "exception.",
+  "error.",
+];
+
+function SpanAttributesCollapsible({ attributes }: { attributes: Record<string, string> }) {
+  const [open, setOpen] = useState(true);
+
+  const filtered = useMemo(() => {
+    return Object.entries(attributes).filter(
+      ([key]) =>
+        key !== "span.events" &&
+        !DISPLAYED_ELSEWHERE_PREFIXES.some((prefix) => key.startsWith(prefix))
+    );
+  }, [attributes]);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors"
+      >
+        {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+        Span Attributes ({filtered.length})
+      </button>
+      {open && (
+        <div className="mt-2 overflow-x-auto rounded border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b bg-muted/30">
+                <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Key</th>
+                <th className="px-3 py-1.5 text-left font-medium text-muted-foreground">Value</th>
+              </tr>
+            </thead>
+            <tbody className="font-mono">
+              {filtered.map(([key, val]) => (
+                <tr key={key} className="border-b last:border-0">
+                  <td className="whitespace-nowrap px-3 py-1.5 text-muted-foreground">{key}</td>
+                  <td className="px-3 py-1.5">
+                    <div className="flex items-center gap-1">
+                      <span className="break-all">{val}</span>
+                      <CopyValue text={val} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Response Tab (AC3) — includes exception details ---
 
 function ResponseTab({ detail }: { detail: SpanDetail }) {
+  const hasError =
+    detail.status_code === "ERROR" || detail.http_status_code >= 500;
+
   return (
     <div className="space-y-4 p-4">
       {/* Status + Timing */}
@@ -304,79 +372,53 @@ function ResponseTab({ detail }: { detail: SpanDetail }) {
         </h4>
         <BodyBlock body={detail.response_body} label="Response Body" />
       </div>
-    </div>
-  );
-}
 
-// --- Exceptions Tab (AC4) ---
+      {/* Exception / Error Details */}
+      {(hasError || detail.status_message) && (
+        <>
+          <div className="rounded border border-red-500/30 bg-red-500/5 p-3">
+            <div className="flex items-center gap-2">
+              <XCircle className="size-4 text-red-500" />
+              <span className="text-sm font-medium text-red-600">
+                {detail.http_status_code >= 500
+                  ? `HTTP ${detail.http_status_code} Server Error`
+                  : "Error"}
+              </span>
+            </div>
+            {detail.status_message && (
+              <p className="mt-2 font-mono text-sm">{detail.status_message}</p>
+            )}
+          </div>
 
-function ExceptionsTab({ detail }: { detail: SpanDetail }) {
-  const hasError =
-    detail.status_code === "ERROR" || detail.http_status_code >= 500;
+          {detail.attributes["exception.type"] && (
+            <div>
+              <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Exception Type
+              </h4>
+              <p className="font-mono text-sm">{detail.attributes["exception.type"]}</p>
+            </div>
+          )}
 
-  if (!hasError && !detail.status_message) {
-    return (
-      <div className="flex h-32 items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground">No exceptions recorded for this span.</p>
-      </div>
-    );
-  }
+          {detail.attributes["exception.message"] && (
+            <div>
+              <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Exception Message
+              </h4>
+              <p className="font-mono text-sm">{detail.attributes["exception.message"]}</p>
+            </div>
+          )}
 
-  return (
-    <div className="space-y-4 p-4">
-      {/* Error Summary */}
-      <div className="rounded border border-red-500/30 bg-red-500/5 p-3">
-        <div className="flex items-center gap-2">
-          <XCircle className="size-4 text-red-500" />
-          <span className="text-sm font-medium text-red-600">
-            {detail.http_status_code >= 500
-              ? `HTTP ${detail.http_status_code} Server Error`
-              : "Error"}
-          </span>
-        </div>
-        {detail.status_message && (
-          <p className="mt-2 font-mono text-sm">{detail.status_message}</p>
-        )}
-      </div>
-
-      {/* Error details from attributes */}
-      {detail.attributes["exception.type"] && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Exception Type
-          </h4>
-          <p className="font-mono text-sm">{detail.attributes["exception.type"]}</p>
-        </div>
-      )}
-
-      {detail.attributes["exception.message"] && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Message
-          </h4>
-          <p className="font-mono text-sm">{detail.attributes["exception.message"]}</p>
-        </div>
-      )}
-
-      {detail.attributes["exception.stacktrace"] && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Stack Trace
-          </h4>
-          <pre className="overflow-x-auto rounded border bg-muted/30 p-3 text-xs leading-relaxed font-mono">
-            {detail.attributes["exception.stacktrace"]}
-          </pre>
-        </div>
-      )}
-
-      {/* Response body for context */}
-      {detail.response_body && (
-        <div>
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Error Response
-          </h4>
-          <BodyBlock body={detail.response_body} label="Error Response" />
-        </div>
+          {detail.attributes["exception.stacktrace"] && (
+            <div>
+              <h4 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Stack Trace
+              </h4>
+              <pre className="overflow-x-auto rounded border bg-muted/30 p-3 text-xs leading-relaxed font-mono">
+                {detail.attributes["exception.stacktrace"]}
+              </pre>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -388,7 +430,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "request", label: "Request" },
   { id: "response", label: "Response" },
   { id: "trace", label: "Trace" },
-  { id: "exceptions", label: "Exceptions" },
 ];
 
 export function SpanInspector({ detail, loading, error, onClose, orgSlug, projectSlug }: SpanInspectorProps) {
@@ -397,7 +438,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
     : false;
 
   const [activeTab, setActiveTab] = useState<TabId>(
-    isError ? "exceptions" : "request"
+    isError ? "response" : "request"
   );
 
   // Fetch trace spans for the Trace Waterfall tab
@@ -412,8 +453,8 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
   if (detail && detail.span_id !== prevSpanId) {
     const shouldAutoSelectExceptions =
       detail.status_code === "ERROR" || detail.http_status_code >= 500;
-    if (shouldAutoSelectExceptions && activeTab !== "exceptions") {
-      setActiveTab("exceptions");
+    if (shouldAutoSelectExceptions && activeTab !== "response") {
+      setActiveTab("response");
     }
   }
 
@@ -503,7 +544,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
             )}
           >
             {tab.label}
-            {tab.id === "exceptions" && isError && (
+            {tab.id === "response" && isError && (
               <span className="ml-1 inline-flex size-1.5 rounded-full bg-red-500" />
             )}
           </button>
@@ -529,7 +570,6 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
                 error={traceError}
               />
             )}
-            {activeTab === "exceptions" && <ExceptionsTab detail={detail} />}
           </>
         )}
       </div>
