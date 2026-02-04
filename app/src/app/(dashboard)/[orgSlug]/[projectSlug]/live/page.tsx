@@ -276,6 +276,7 @@ export default function LivePage() {
 
   const [projectId, setProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const spans = useLiveStreamStore((s) => s.spans);
   const isAtBottom = useLiveStreamStore((s) => s.isAtBottom);
@@ -412,6 +413,40 @@ export default function LivePage() {
   useEffect(() => {
     return () => reset();
   }, [reset]);
+
+  // Load recent spans on initial page load so the list isn't empty
+  useEffect(() => {
+    if (!projectId || initialLoadDone || isHistoricalMode) return;
+
+    let cancelled = false;
+    async function loadInitial() {
+      try {
+        const url = `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50`;
+        const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
+        if (cancelled) return;
+        const fetched = res.data;
+
+        if (fetched.length > 0) {
+          const chronological = [...fetched].reverse();
+          prependSpans(chronological);
+
+          const meta = res.meta as { has_more?: boolean };
+          if (!meta.has_more) {
+            setHasMoreHistory(false);
+          }
+        } else {
+          setHasMoreHistory(false);
+        }
+      } catch {
+        // Non-blocking
+      } finally {
+        if (!cancelled) setInitialLoadDone(true);
+      }
+    }
+
+    loadInitial();
+    return () => { cancelled = true; };
+  }, [projectId, initialLoadDone, isHistoricalMode, orgSlug, projectSlug, prependSpans, setHasMoreHistory]);
 
   // SSE: push spans into Zustand store
   const handleSpan = useCallback(
@@ -590,9 +625,9 @@ export default function LivePage() {
   }
 
   // Determine what to show
-  const showSkeleton = loading;
-  const showEmpty = !loading && status === "connected" && spans.length === 0;
-  const showList = !loading && spans.length > 0;
+  const showSkeleton = loading || !initialLoadDone;
+  const showEmpty = !loading && initialLoadDone && spans.length === 0;
+  const showList = !loading && initialLoadDone && spans.length > 0;
   const showNoResults = showList && filteredSpans.length === 0;
 
   return (
