@@ -4,6 +4,9 @@ import { createMDX } from "fumadocs-mdx/next";
 const config = {
   output: "export",
   reactStrictMode: true,
+  images: {
+    unoptimized: true,
+  },
   turbopack: {
     resolveAlias: {
       "fumadocs-mdx:collections/server": "./.source/server.ts",
