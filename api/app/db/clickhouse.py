@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS spans (
 ENGINE = MergeTree()
 PARTITION BY (org_id, toYYYYMMDD(start_time))
 ORDER BY (org_id, project_id, service_name, start_time, trace_id, span_id)
-TTL start_time + INTERVAL 90 DAY DELETE
+TTL toDateTime(start_time) + INTERVAL 90 DAY DELETE
 """
 
 METRICS_1M_VIEW_DDL = """

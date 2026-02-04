@@ -28,6 +28,16 @@ class SpanSummary(BaseModel):
     http_status_code: int
 
 
+class TraceSpan(SpanSummary):
+    """Extended span summary for Trace Waterfall view.
+
+    Includes attributes map to carry span events (log events)
+    needed for the waterfall tree display.
+    """
+
+    attributes: dict[str, str] = {}
+
+
 def build_span_summary(span_row: dict[str, Any]) -> SpanSummary:
     """Convert an ingested span row dict to a SpanSummary for SSE broadcast."""
     start_time = span_row["start_time"]

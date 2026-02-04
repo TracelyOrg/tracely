@@ -6,7 +6,7 @@ from datetime import datetime
 
 from app.db.clickhouse import get_clickhouse_client
 from app.schemas.span import SpanDetail, build_span_detail
-from app.schemas.stream import SpanSummary
+from app.schemas.stream import SpanSummary, TraceSpan
 
 # Columns to select for span history (matches SpanSummary fields)
 _HISTORY_COLUMNS = [
@@ -160,3 +160,65 @@ async def get_span_by_id(
 
     row_dict = dict(zip(result.column_names, result.result_rows[0]))
     return build_span_detail(row_dict)
+
+
+# --- Trace spans (Story 3.4) ---
+
+
+_TRACE_COLUMNS = _HISTORY_COLUMNS + ["attributes"]
+_TRACE_COLUMNS_SQL = ", ".join(_TRACE_COLUMNS)
+
+
+async def get_trace_spans(
+    *,
+    org_id: uuid.UUID,
+    project_id: uuid.UUID,
+    trace_id: str,
+) -> list[TraceSpan]:
+    """Fetch all completed spans belonging to a trace, ordered by start_time ASC.
+
+    Used by the Trace Waterfall view to build the hierarchical span tree.
+    Includes attributes (for span events / log events).
+    Only returns span_type='span' (excludes pending_span).
+    """
+    client = get_clickhouse_client()
+
+    query = (
+        f"SELECT {_TRACE_COLUMNS_SQL} FROM spans"
+        " WHERE org_id = %(org_id)s"
+        " AND project_id = %(project_id)s"
+        " AND trace_id = %(trace_id)s"
+        " AND span_type = 'span'"
+        " ORDER BY start_time ASC"
+        " LIMIT 500"
+    )
+
+    result = await asyncio.to_thread(
+        client.query,
+        query,
+        parameters={
+            "org_id": str(org_id),
+            "project_id": str(project_id),
+            "trace_id": trace_id,
+        },
+    )
+
+    if not result.result_rows:
+        return []
+
+    col_names = result.column_names
+    rows = []
+    for row in result.result_rows:
+        row_dict = dict(zip(col_names, row))
+        st = row_dict.get("start_time")
+        if isinstance(st, datetime):
+            row_dict["start_time"] = st.isoformat()
+        elif not isinstance(st, str):
+            row_dict["start_time"] = str(st)
+        # Ensure attributes is a dict
+        attrs = row_dict.get("attributes")
+        if not isinstance(attrs, dict):
+            row_dict["attributes"] = {}
+        rows.append(TraceSpan(**row_dict))
+
+    return rows

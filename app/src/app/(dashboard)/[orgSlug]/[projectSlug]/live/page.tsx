@@ -408,6 +408,8 @@ export default function LivePage() {
               loading={detailLoading}
               error={detailError}
               onClose={() => setSelectedSpanId(null)}
+              orgSlug={orgSlug}
+              projectSlug={projectSlug}
             />
           </div>
         )}

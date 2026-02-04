@@ -3,6 +3,11 @@ import "@testing-library/jest-dom";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
 import type { SpanDetail } from "@/types/span";
 
+// Mock useTraceSpans to avoid fetch calls in tests
+jest.mock("@/hooks/useTraceSpans", () => ({
+  useTraceSpans: () => ({ spans: [], loading: false, error: null }),
+}));
+
 function makeDetail(overrides: Partial<SpanDetail> = {}): SpanDetail {
   return {
     trace_id: "trace-abc123",
@@ -45,6 +50,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -63,6 +70,8 @@ describe("SpanInspector", () => {
         loading={true}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -77,6 +86,8 @@ describe("SpanInspector", () => {
         loading={false}
         error="Span not found"
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -90,6 +101,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -97,18 +110,21 @@ describe("SpanInspector", () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it("shows three tabs: Request, Response, Exceptions", () => {
+  it("shows four tabs: Request, Response, Trace, Exceptions", () => {
     render(
       <SpanInspector
         detail={makeDetail()}
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
     expect(screen.getByText("Request")).toBeInTheDocument();
     expect(screen.getByText("Response")).toBeInTheDocument();
+    expect(screen.getByText("Trace")).toBeInTheDocument();
     expect(screen.getByText("Exceptions")).toBeInTheDocument();
   });
 
@@ -119,6 +135,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -135,6 +153,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -152,6 +172,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -172,6 +194,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -189,6 +213,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -213,6 +239,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -228,6 +256,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 
@@ -242,6 +272,8 @@ describe("SpanInspector", () => {
         loading={false}
         error={null}
         onClose={mockOnClose}
+        orgSlug="test-org"
+        projectSlug="test-project"
       />
     );
 

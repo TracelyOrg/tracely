@@ -159,6 +159,23 @@ def extract_spans(
                     if not k.startswith("tracely.")
                 }
 
+                # Extract span events (OTLP log events) and store as JSON
+                if otlp_span.events:
+                    events_list = []
+                    for event in otlp_span.events:
+                        event_attrs = _extract_attributes(event.attributes)
+                        events_list.append({
+                            "timestamp": _nanos_to_datetime(
+                                event.time_unix_nano
+                            ).isoformat(),
+                            "name": event.name,
+                            "level": _get_attr(event_attrs, "level", "info"),
+                            "message": _get_attr(
+                                event_attrs, "message", event.name
+                            ),
+                        })
+                    general_attrs["span.events"] = json.dumps(events_list)
+
                 span_row: dict[str, Any] = {
                     "org_id": str(org_id),
                     "project_id": str(project_id),

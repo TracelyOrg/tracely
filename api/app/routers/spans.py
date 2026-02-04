@@ -62,6 +62,41 @@ async def list_spans(
     )
 
 
+@router.get("/trace/{trace_id}")
+async def list_trace_spans(
+    project_slug: str = Path(...),
+    trace_id: str = Path(..., description="The trace_id to fetch all spans for"),
+    org_id: uuid.UUID = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Fetch all spans belonging to a trace for the Trace Waterfall view.
+
+    Returns spans ordered by start_time ASC (chronological) for tree building.
+    Only returns completed spans (span_type='span').
+    """
+    result = await db.execute(
+        select(Project).where(
+            Project.org_id == org_id,
+            Project.slug == project_slug,
+            Project.is_active == True,  # noqa: E712
+        )
+    )
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError("Project not found")
+
+    spans = await span_service.get_trace_spans(
+        org_id=org_id,
+        project_id=project.id,
+        trace_id=trace_id,
+    )
+
+    return success(
+        [s.model_dump(mode="json") for s in spans],
+        meta={"count": len(spans)},
+    )
+
+
 @router.get("/{span_id}")
 async def get_span_detail(
     project_slug: str = Path(...),

@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SpanDetail } from "@/types/span";
+import { useTraceSpans } from "@/hooks/useTraceSpans";
+import { TraceWaterfall } from "@/components/pulse/TraceWaterfall";
 
 // --- Types ---
 
@@ -21,9 +23,11 @@ interface SpanInspectorProps {
   loading: boolean;
   error: string | null;
   onClose: () => void;
+  orgSlug: string;
+  projectSlug: string;
 }
 
-type TabId = "request" | "response" | "exceptions";
+type TabId = "request" | "response" | "exceptions" | "trace";
 
 // --- Helpers ---
 
@@ -380,10 +384,11 @@ function ExceptionsTab({ detail }: { detail: SpanDetail }) {
 const TABS: { id: TabId; label: string }[] = [
   { id: "request", label: "Request" },
   { id: "response", label: "Response" },
+  { id: "trace", label: "Trace" },
   { id: "exceptions", label: "Exceptions" },
 ];
 
-export function SpanInspector({ detail, loading, error, onClose }: SpanInspectorProps) {
+export function SpanInspector({ detail, loading, error, onClose, orgSlug, projectSlug }: SpanInspectorProps) {
   const isError = detail
     ? detail.status_code === "ERROR" || detail.http_status_code >= 500
     : false;
@@ -391,6 +396,13 @@ export function SpanInspector({ detail, loading, error, onClose }: SpanInspector
   const [activeTab, setActiveTab] = useState<TabId>(
     isError ? "exceptions" : "request"
   );
+
+  // Fetch trace spans for the Trace Waterfall tab
+  const {
+    spans: traceSpans,
+    loading: traceLoading,
+    error: traceError,
+  } = useTraceSpans(orgSlug, projectSlug, detail?.trace_id ?? null);
 
   // Update default tab when detail changes (auto-select exceptions for errors)
   const prevSpanId = useMemo(() => detail?.span_id, [detail?.span_id]);
@@ -488,6 +500,13 @@ export function SpanInspector({ detail, loading, error, onClose }: SpanInspector
           <>
             {activeTab === "request" && <RequestTab detail={detail} />}
             {activeTab === "response" && <ResponseTab detail={detail} />}
+            {activeTab === "trace" && (
+              <TraceWaterfall
+                spans={traceSpans}
+                loading={traceLoading}
+                error={traceError}
+              />
+            )}
             {activeTab === "exceptions" && <ExceptionsTab detail={detail} />}
           </>
         )}

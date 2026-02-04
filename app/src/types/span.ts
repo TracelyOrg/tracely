@@ -14,6 +14,40 @@ export interface SpanEvent {
   http_status_code: number;
 }
 
+/** Extended span data for the Trace Waterfall view (includes attributes). */
+export interface TraceSpanEvent extends SpanEvent {
+  attributes: Record<string, string>;
+}
+
+/** A log event attached to a span (from OTLP span events). */
+export interface SpanLogEvent {
+  timestamp: string;
+  name: string;
+  level: "info" | "warn" | "error" | "debug";
+  message: string;
+}
+
+/** A node in the trace span tree with children and computed waterfall data. */
+export interface SpanTreeNode {
+  span: SpanEvent;
+  children: SpanTreeNode[];
+  depth: number;
+  /** Offset from trace start in ms */
+  offsetMs: number;
+  /** Duration as percentage of total trace duration */
+  percentOfTrace: number;
+  /** Offset as percentage of total trace duration */
+  offsetPercent: number;
+  /** Total duration of all children (for collapsed summary) */
+  childrenDurationMs: number;
+  /** Whether this span is the slowest in the trace */
+  isSlowest: boolean;
+  /** Whether this span exceeds a slow threshold */
+  isBottleneck: boolean;
+  /** Parsed log events if available */
+  logEvents: SpanLogEvent[];
+}
+
 /** Full span detail returned by GET /spans/{span_id}. */
 export interface SpanDetail extends SpanEvent {
   framework: string;
