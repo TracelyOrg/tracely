@@ -5,16 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight,
   Globe,
-  Database,
+
   Server,
   Layers,
   ArrowRight,
   ArrowLeft,
-  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildSpanTree, flattenTree, getAllSpanIds } from "@/lib/spanTree";
-import type { SpanEvent, TraceSpanEvent, SpanTreeNode, SpanLogEvent } from "@/types/span";
+import type { TraceSpanEvent, SpanTreeNode, SpanLogEvent } from "@/types/span";
 
 // --- Types ---
 
@@ -199,17 +198,6 @@ function countDescendants(node: SpanTreeNode): number {
   return count;
 }
 
-// --- Bottleneck Label ---
-
-function BottleneckBadge() {
-  return (
-    <span className="ml-1 inline-flex items-center gap-0.5 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-      <AlertTriangle className="size-2.5" />
-      Bottleneck
-    </span>
-  );
-}
-
 // --- Timing Header ---
 
 function TimingHeader({ traceDurationMs }: { traceDurationMs: number }) {
@@ -274,42 +262,26 @@ function LogEvents({ events, depth }: LogEventsProps) {
   );
 }
 
-// --- Timing Detail Row (AC4) ---
-
-function TimingDetail({ node, traceDurationMs, traceStartTime }: {
-  node: SpanTreeNode;
-  traceDurationMs: number;
-  traceStartTime: string;
-}) {
-  const relativeStartMs = node.offsetMs;
-  const pct = node.percentOfTrace;
-
-  return (
-    <div
-      className="flex items-center gap-3 border-b border-dashed border-muted/40 bg-muted/10 py-1 pr-3 text-[10px] text-muted-foreground font-mono"
-      style={{ paddingLeft: `${8 + (node.depth + 1) * 20 + 22}px` }}
-    >
-      <span>+{formatDuration(relativeStartMs)}</span>
-      <span>{formatDuration(node.span.duration_ms)}</span>
-      <span>{pct.toFixed(1)}% of trace</span>
-      {node.isBottleneck && <BottleneckBadge />}
-    </div>
-  );
-}
-
 // --- Main Component ---
 
 export function TraceWaterfall({ spans, loading, error }: TraceWaterfallProps) {
   const tree = useMemo(() => buildSpanTree(spans), [spans]);
 
-  // Default: all nodes expanded
+  // Default: all nodes expanded. Track collapsed IDs per tree version.
   const allIds = useMemo(() => getAllSpanIds(tree), [tree]);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [toggleState, setToggleState] = useState<{
+    treeVersion: Set<string>;
+    collapsed: Set<string>;
+  }>({ treeVersion: new Set(), collapsed: new Set() });
 
-  // Initialize expanded state when tree changes
-  useMemo(() => {
-    setExpandedIds(allIds);
-  }, [allIds]);
+  const expandedIds = useMemo(() => {
+    if (toggleState.treeVersion !== allIds) {
+      return allIds;
+    }
+    const result = new Set(allIds);
+    for (const id of toggleState.collapsed) result.delete(id);
+    return result;
+  }, [allIds, toggleState]);
 
   const flatNodes = useMemo(
     () => flattenTree(tree, expandedIds),
@@ -317,17 +289,19 @@ export function TraceWaterfall({ spans, loading, error }: TraceWaterfallProps) {
   );
 
   const traceDurationMs = tree.length > 0 ? tree[0].span.duration_ms : 0;
-  const traceStartTime = tree.length > 0 ? tree[0].span.start_time : "";
 
   function handleToggle(spanId: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(spanId)) {
-        next.delete(spanId);
+    setToggleState((prev) => {
+      const collapsed = prev.treeVersion === allIds
+        ? new Set(prev.collapsed)
+        : new Set<string>();
+
+      if (collapsed.has(spanId)) {
+        collapsed.delete(spanId);
       } else {
-        next.add(spanId);
+        collapsed.add(spanId);
       }
-      return next;
+      return { treeVersion: allIds, collapsed };
     });
   }
 

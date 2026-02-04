@@ -20,6 +20,8 @@ def mock_user():
         password_hash="$2b$12$hashed",
         full_name=None,
         is_active=True,
+        onboarding_completed=False,
+        email_verified=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -34,6 +36,8 @@ def mock_user_b():
         password_hash="$2b$12$hashed",
         full_name=None,
         is_active=True,
+        onboarding_completed=False,
+        email_verified=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -172,12 +176,17 @@ def test_create_org_empty_name(client, mock_user):
 def test_list_orgs_success(client, mock_user, sample_org):
     """Lists orgs the user belongs to."""
     from app.main import app
+    from app.services.org_service import EnrichedOrg
 
     _override_auth(app, mock_user)
 
+    enriched = EnrichedOrg(
+        org=sample_org, user_role="admin", member_count=1, project_count=0
+    )
+
     with patch("app.routers.organizations.org_service") as mock_service:
         mock_service.list_user_organizations = AsyncMock(
-            return_value=[sample_org]
+            return_value=[enriched]
         )
 
         response = client.get("/api/orgs")
@@ -225,13 +234,9 @@ def test_get_org_success(client, mock_user, sample_org, sample_member):
     _override_auth(app, mock_user)
 
     mock_db = AsyncMock()
-    # First execute: get_org_by_slug returns org
-    # Second execute: membership check returns member
+    # Only the membership check hits db.execute (get_org_by_slug is patched)
     mock_db.execute = AsyncMock(
-        side_effect=[
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sample_org)),
-            MagicMock(scalar_one_or_none=MagicMock(return_value=sample_member)),
-        ]
+        return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=sample_member))
     )
 
     with patch("app.routers.organizations.org_service") as mock_service:

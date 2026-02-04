@@ -36,7 +36,7 @@ export function useEventStream({
   const heartbeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSpanRef = useRef(onSpan);
-  onSpanRef.current = onSpan;
+  const connectRef = useRef<(() => void) | null>(null);
 
   const clearTimers = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -70,8 +70,6 @@ export function useEventStream({
     eventSourceRef.current?.close();
     clearTimers();
 
-    setStatus("connecting");
-
     const url = `${API_BASE}/api/stream/${projectId}`;
     const es = new EventSource(url, { withCredentials: true });
     eventSourceRef.current = es;
@@ -83,7 +81,7 @@ export function useEventStream({
         MAX_BACKOFF_MS
       );
       setStatus("disconnected");
-      reconnectTimerRef.current = setTimeout(connect, delay);
+      reconnectTimerRef.current = setTimeout(() => connectRef.current?.(), delay);
     }
 
     es.onopen = () => {
@@ -112,6 +110,11 @@ export function useEventStream({
       scheduleReconnect();
     };
   }, [projectId, enabled, clearTimers, resetHeartbeatTimer]);
+
+  useEffect(() => {
+    onSpanRef.current = onSpan;
+    connectRef.current = connect;
+  });
 
   useEffect(() => {
     connect();

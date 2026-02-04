@@ -11,16 +11,14 @@ export default function VerifyTokenPage() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
   const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
+    token ? "loading" : "error"
   );
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(
+    token ? "" : "No verification token provided."
+  );
 
   useEffect(() => {
-    if (!token) {
-      setStatus("error");
-      setErrorMessage("No verification token provided.");
-      return;
-    }
+    if (!token) return;
 
     let cancelled = false;
 

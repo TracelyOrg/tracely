@@ -29,6 +29,8 @@ def mock_user():
         password_hash="$2b$12$hashed",
         full_name=None,
         is_active=True,
+        onboarding_completed=False,
+        email_verified=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -52,11 +54,12 @@ def test_register_success(client, mock_user):
     body = response.json()
     assert "data" in body
     assert "meta" in body
-    assert body["data"]["user"]["email"] == "test@example.com"
+    assert body["data"]["email"] == "test@example.com"
+    assert "message" in body["data"]
 
 
-def test_register_sets_httponly_cookies(client, mock_user):
-    """Test registration sets HTTP-only cookies."""
+def test_register_no_cookies_before_verification(client, mock_user):
+    """Test registration does not set cookies (email verification required first)."""
     with patch("app.routers.auth.auth_service") as mock_service:
         mock_service.register_user = AsyncMock(return_value=mock_user)
 
@@ -67,8 +70,8 @@ def test_register_sets_httponly_cookies(client, mock_user):
 
     assert response.status_code == 201
     cookies = response.cookies
-    assert "access_token" in cookies
-    assert "refresh_token" in cookies
+    assert "access_token" not in cookies
+    assert "refresh_token" not in cookies
 
 
 def test_register_duplicate_email(client):

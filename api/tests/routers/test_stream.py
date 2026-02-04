@@ -24,6 +24,7 @@ def mock_user():
         full_name=None,
         is_active=True,
         onboarding_completed=False,
+        email_verified=False,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )

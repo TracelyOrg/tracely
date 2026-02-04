@@ -22,16 +22,14 @@ export default function InvitePage() {
   const router = useRouter();
   const token = searchParams.get("token");
 
-  const [state, setState] = useState<PageState>("loading");
+  const [state, setState] = useState<PageState>(token ? "loading" : "error");
   const [info, setInfo] = useState<InviteInfo | null>(null);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState(
+    token ? "" : "No invitation token provided"
+  );
 
   useEffect(() => {
-    if (!token) {
-      setState("error");
-      setErrorMsg("No invitation token provided");
-      return;
-    }
+    if (!token) return;
 
     async function loadInfo() {
       try {

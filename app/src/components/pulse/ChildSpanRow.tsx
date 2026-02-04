@@ -32,7 +32,6 @@ interface ChildSpanRowProps {
 
 export const ChildSpanRow = memo(function ChildSpanRow({
   span,
-  depth = 1,
   childCount = 0,
   isSelected,
   isLast = false,

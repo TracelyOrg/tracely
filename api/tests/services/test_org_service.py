@@ -67,14 +67,16 @@ async def test_create_organization_creates_org_and_admin(mock_db):
 async def test_list_user_organizations_returns_orgs(mock_db, sample_org):
     """User sees only orgs they belong to."""
     mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [sample_org]
+    # Service uses result.all() which returns row tuples: (Organization, role, member_count, project_count)
+    mock_result.all.return_value = [(sample_org, "admin", 1, 0)]
     mock_db.execute = AsyncMock(return_value=mock_result)
 
     from app.services.org_service import list_user_organizations
 
     orgs = await list_user_organizations(mock_db, uuid.uuid4())
     assert len(orgs) == 1
-    assert orgs[0].slug == "acme-corp"
+    assert orgs[0].org.slug == "acme-corp"
+    assert orgs[0].user_role == "admin"
 
 
 @pytest.mark.asyncio

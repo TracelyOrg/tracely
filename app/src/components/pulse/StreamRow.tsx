@@ -36,7 +36,6 @@ export const StreamRow = memo(function StreamRow({
   span,
   isSelected,
   childCount = 0,
-  hasErrorChildren = false,
   isExpanded = false,
   onToggleExpand,
   onClick,

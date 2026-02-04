@@ -86,14 +86,12 @@ export default function BreadcrumbPicker({
   }, []);
 
   useEffect(() => {
-    if (!currentOrgSlug) {
-      setProjects([]);
-      return;
-    }
+    if (!currentOrgSlug) return;
 
     let cancelled = false;
 
     async function loadProjects() {
+      setProjects([]);
       try {
         const res = await apiFetch<DataEnvelope<ProjectItem[]>>(
           `/api/orgs/${currentOrgSlug}/projects`
