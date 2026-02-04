@@ -1,4 +1,4 @@
-.PHONY: up down infra api app test migrate lint dev sdk-install sdk-example
+.PHONY: up down infra api app website website-install test migrate lint dev sdk-install sdk-example
 
 # ── Infrastructure ──────────────────────────────────────────
 infra:
@@ -23,6 +23,13 @@ app:
 
 app-install:
 	cd app && npm install
+
+# ── Website (Next.js) ─────────────────────────────────────
+website:
+	cd website && pnpm dev
+
+website-install:
+	cd website && pnpm install
 
 # ── Database Migrations ────────────────────────────────────
 migrate:

@@ -1,7 +1,7 @@
 export default function FrameworkSupport() {
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-accent text-center mb-10">
           Docs For Engineers.
         </h2>

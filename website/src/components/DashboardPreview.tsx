@@ -1,7 +1,7 @@
 export default function DashboardPreview() {
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-10 items-center">
         {/* Left: Dashboard mockup */}
         <div className="rounded-xl border border-white/10 bg-card overflow-hidden">
           {/* Tab bar */}

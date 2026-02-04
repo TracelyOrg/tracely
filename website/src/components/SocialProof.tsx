@@ -59,7 +59,7 @@ export default function SocialProof() {
 
   return (
     <section className="py-20 md:py-28 px-6 overflow-hidden">
-      <div className="max-w-5xl mx-auto mb-10">
+      <div className="max-w-7xl mx-auto mb-10">
         <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
           Built for developers who ship fast.
         </h2>
@@ -76,7 +76,7 @@ export default function SocialProof() {
       </div>
 
       {/* Scrolling marquee */}
-      <div className="relative">
+      <div className="max-w-7xl mx-auto overflow-hidden">
         <div className="flex gap-6 animate-marquee">
           {allCards.map((t, i) => (
             <TestimonialCard key={i} {...t} />

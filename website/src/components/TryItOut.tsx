@@ -14,7 +14,7 @@ export default function TryItOut() {
 
   return (
     <section className="relative py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Heading */}
         <h2 className="text-center text-sm font-semibold tracking-[0.2em] uppercase text-accent mb-12">
           TRY IT OUT.

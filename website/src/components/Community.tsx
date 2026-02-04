@@ -8,7 +8,7 @@ export default function Community() {
 
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Heading */}
         <h2 className="text-3xl md:text-4xl font-bold text-foreground text-center mb-10">
           Open Source. Privacy First.
@@ -27,7 +27,7 @@ export default function Community() {
 
             <div className="flex flex-wrap gap-3 mb-8">
               <a
-                href="https://github.com/anthropics/tracely"
+                href="https://github.com/TracelyOrg/tracely"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-foreground hover:bg-white/10 transition-colors"

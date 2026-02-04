@@ -59,7 +59,7 @@ export default function BottomCta() {
             Read docs
           </Link>
           <a
-            href="https://github.com/anthropics/tracely"
+            href="https://github.com/TracelyOrg/tracely"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-md border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-foreground hover:bg-white/10 transition-colors"

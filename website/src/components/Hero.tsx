@@ -1,24 +1,11 @@
-import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Github } from "lucide-react";
 
 export default function Hero() {
   return (
     <section className="relative w-full pt-12 overflow-hidden">
-      {/* Background image */}
-      <div className="absolute inset-0 z-0">
-        <Image
-          src="/hero.jpg"
-          alt=""
-          fill
-          className="object-cover opacity-60"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/60 to-background" />
-      </div>
-
       {/* Content */}
-      <div className="relative z-10 max-w-5xl mx-auto px-6 pt-24 pb-16 md:pt-32 md:pb-24">
+      <div className="max-w-7xl mx-auto px-6 pt-24 pb-16 md:pt-32 md:pb-24">
         {/* Pill badge */}
         <div className="inline-flex items-center rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent mb-6">
           the observability platform Python developers love.
@@ -40,7 +27,7 @@ export default function Hero() {
             <ArrowRight size={16} />
           </Link>
           <a
-            href="https://github.com/anthropics/tracely"
+            href="https://github.com/TracelyOrg/tracely"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-md border border-white/15 bg-white/5 px-5 py-2.5 text-sm font-medium text-foreground hover:bg-white/10 transition-colors"

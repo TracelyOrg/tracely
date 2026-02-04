@@ -77,7 +77,7 @@ export default function SdkFeatures() {
 
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Heading */}
         <h2 className="text-3xl md:text-4xl font-bold text-foreground text-center mb-10">
           Built for Python Engineers.

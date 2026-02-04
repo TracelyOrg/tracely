@@ -1,7 +1,7 @@
 export default function FeatureCards() {
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-6">
+      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-6">
         {/* Left: Live request stream */}
         <div className="rounded-xl border border-white/10 bg-card p-6 md:p-8">
           <h3 className="text-2xl font-bold text-foreground mb-3">

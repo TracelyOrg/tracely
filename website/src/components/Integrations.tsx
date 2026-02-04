@@ -1,7 +1,7 @@
 export default function Integrations() {
   return (
     <section className="py-20 md:py-28 px-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
           Works with your stack.
         </h2>
