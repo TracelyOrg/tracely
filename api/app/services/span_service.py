@@ -33,9 +33,13 @@ async def get_span_history(
     org_id: uuid.UUID,
     project_id: uuid.UUID,
     before: datetime | None = None,
+    after: datetime | None = None,
     limit: int = 50,
+    service: str | None = None,
+    status_groups: list[str] | None = None,
+    endpoint_search: str | None = None,
 ) -> list[SpanSummary]:
-    """Query historical spans from ClickHouse with cursor-based pagination.
+    """Query historical spans from ClickHouse with cursor-based pagination and filters.
 
     Returns spans ordered by start_time DESC (newest first), which the
     frontend reverses to prepend oldest-at-top.
@@ -44,7 +48,11 @@ async def get_span_history(
         org_id: Organization scope (multi-tenant isolation).
         project_id: Project filter.
         before: Cursor — only return spans with start_time < this value.
+        after: Only return spans with start_time >= this value.
         limit: Max rows to return.
+        service: Filter by service_name (exact match).
+        status_groups: Filter by HTTP status code groups (e.g. ["4xx", "5xx"]).
+        endpoint_search: Filter by http_route substring (case-insensitive).
     """
     client = get_clickhouse_client()
 
@@ -61,6 +69,33 @@ async def get_span_history(
     if before is not None:
         where_clauses.append("start_time < %(before)s")
         params["before"] = before.isoformat()
+
+    if after is not None:
+        where_clauses.append("start_time >= %(after)s")
+        params["after"] = after.isoformat()
+
+    if service is not None:
+        where_clauses.append("service_name = %(service)s")
+        params["service"] = service
+
+    if status_groups:
+        # Build OR conditions for status code ranges
+        range_conditions = []
+        for group in status_groups:
+            if group == "2xx":
+                range_conditions.append("(http_status_code >= 200 AND http_status_code < 300)")
+            elif group == "3xx":
+                range_conditions.append("(http_status_code >= 300 AND http_status_code < 400)")
+            elif group == "4xx":
+                range_conditions.append("(http_status_code >= 400 AND http_status_code < 500)")
+            elif group == "5xx":
+                range_conditions.append("(http_status_code >= 500 AND http_status_code < 600)")
+        if range_conditions:
+            where_clauses.append(f"({' OR '.join(range_conditions)})")
+
+    if endpoint_search:
+        where_clauses.append("positionCaseInsensitive(http_route, %(endpoint_search)s) > 0")
+        params["endpoint_search"] = endpoint_search
 
     where_sql = " AND ".join(where_clauses)
 

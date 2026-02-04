@@ -1,3 +1,32 @@
+// --- Filter types (Story 3.5) ---
+
+export type StatusCodeGroup = "2xx" | "3xx" | "4xx" | "5xx";
+
+export type TimeRangePreset = "15m" | "1h" | "6h" | "24h" | "custom";
+
+export interface TimeRange {
+  preset: TimeRangePreset;
+  /** Only used when preset === "custom" */
+  start?: string;
+  end?: string;
+}
+
+export interface StreamFilters {
+  service: string | null;
+  statusGroups: StatusCodeGroup[];
+  endpointSearch: string;
+  timeRange: TimeRange;
+}
+
+export const DEFAULT_FILTERS: StreamFilters = {
+  service: null,
+  statusGroups: [],
+  endpointSearch: "",
+  timeRange: { preset: "15m" },
+};
+
+// --- Span types ---
+
 export interface SpanEvent {
   trace_id: string;
   span_id: string;

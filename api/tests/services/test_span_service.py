@@ -160,6 +160,143 @@ async def test_get_span_history_scopes_by_org_and_project(org_id, project_id):
     assert "project_id" in query_str
 
 
+# --- get_span_history filter tests (Story 3.5) ---
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_filters_by_service(org_id, project_id):
+    """get_span_history adds service_name WHERE clause when service param is set."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+            service="api-gateway",
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    params = mock_client.query.call_args[1]["parameters"]
+    assert "service_name = %(service)s" in query_str
+    assert params["service"] == "api-gateway"
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_filters_by_status_groups(org_id, project_id):
+    """get_span_history adds status code range WHERE clause for status groups."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+            status_groups=["4xx", "5xx"],
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    assert "http_status_code >= 400" in query_str
+    assert "http_status_code >= 500" in query_str
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_filters_by_endpoint_search(org_id, project_id):
+    """get_span_history adds positionCaseInsensitive WHERE clause for endpoint search."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+            endpoint_search="/api/users",
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    params = mock_client.query.call_args[1]["parameters"]
+    assert "positionCaseInsensitive" in query_str
+    assert params["endpoint_search"] == "/api/users"
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_filters_by_after_time(org_id, project_id):
+    """get_span_history adds start_time >= WHERE clause for after param."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    after = datetime(2026, 2, 3, 8, 0, 0, tzinfo=timezone.utc)
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+            after=after,
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    assert "start_time >=" in query_str
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_combined_filters_include_multi_tenant(org_id, project_id):
+    """Combined filters still enforce org_id and project_id scoping."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+            service="api",
+            status_groups=["5xx"],
+            endpoint_search="/health",
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    assert "org_id" in query_str
+    assert "project_id" in query_str
+    assert "service_name" in query_str
+    assert "http_status_code" in query_str
+    assert "positionCaseInsensitive" in query_str
+
+
+@pytest.mark.asyncio
+async def test_get_span_history_no_filters_omits_filter_clauses(org_id, project_id):
+    """Without filter params, query has only base WHERE clauses."""
+    mock_client = MagicMock()
+    mock_result = MagicMock()
+    mock_result.column_names = []
+    mock_result.result_rows = []
+    mock_client.query.return_value = mock_result
+
+    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+        await get_span_history(
+            org_id=org_id,
+            project_id=project_id,
+        )
+
+    query_str = mock_client.query.call_args[0][0]
+    assert "service_name = %(service)s" not in query_str
+    assert "positionCaseInsensitive" not in query_str
+    assert "http_status_code >=" not in query_str
+
+
 # --- get_span_by_id tests (Story 3.3) ---
 
 

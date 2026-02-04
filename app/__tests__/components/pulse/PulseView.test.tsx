@@ -12,6 +12,7 @@ import "@testing-library/jest-dom";
 // Mock next/navigation
 jest.mock("next/navigation", () => ({
   useParams: () => ({ orgSlug: "test-org", projectSlug: "test-project" }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Mock apiFetch to simulate loading states

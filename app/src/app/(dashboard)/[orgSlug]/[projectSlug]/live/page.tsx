@@ -1,18 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw } from "lucide-react";
+import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
-import type { SpanEvent } from "@/types/span";
+import type { SpanEvent, StatusCodeGroup, TimeRangePreset } from "@/types/span";
 import { useEventStream } from "@/hooks/useEventStream";
 import { useSpanDetail } from "@/hooks/useSpanDetail";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
+import { useFilterStore } from "@/stores/filterStore";
+import { matchesFilters } from "@/lib/filterUtils";
 import { StreamRow } from "@/components/pulse/StreamRow";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
+import { FilterBar } from "@/components/pulse/FilterBar";
 
 interface ProjectInfo {
   id: string;
@@ -218,9 +221,11 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
 function LiveHeader({
   status,
   spanCount,
+  isHistorical,
 }: {
   status: "connecting" | "connected" | "disconnected";
   spanCount: number;
+  isHistorical?: boolean;
 }) {
   return (
     <div className="sticky top-0 z-10 flex h-10 items-center justify-between border-b bg-background/95 px-4 backdrop-blur-sm">
@@ -231,7 +236,12 @@ function LiveHeader({
         </span>
       </div>
       <div className="flex items-center gap-1.5">
-        {status === "connected" ? (
+        {isHistorical ? (
+          <>
+            <Clock className="size-3.5 text-violet-500" />
+            <span className="text-xs text-violet-600">Historical</span>
+          </>
+        ) : status === "connected" ? (
           <>
             <span className="relative flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -277,6 +287,88 @@ export default function LivePage() {
   const setLoadingHistory = useLiveStreamStore((s) => s.setLoadingHistory);
   const setHasMoreHistory = useLiveStreamStore((s) => s.setHasMoreHistory);
   const reset = useLiveStreamStore((s) => s.reset);
+
+  // --- Filter state (Story 3.5) ---
+  const filters = useFilterStore((s) => s.filters);
+
+  const services = useMemo(
+    () => [...new Set(spans.map((s) => s.service_name))].sort(),
+    [spans]
+  );
+
+  const filteredSpans = useMemo(
+    () => spans.filter((s) => matchesFilters(s, filters)),
+    [spans, filters]
+  );
+
+  // Historical mode: custom time range with both start and end set (AC5)
+  const isHistoricalMode =
+    filters.timeRange.preset === "custom" &&
+    !!filters.timeRange.start &&
+    !!filters.timeRange.end;
+
+  // --- Filter URL sync (UX16) ---
+  const searchParams = useSearchParams();
+  const filterReset = useFilterStore((s) => s.reset);
+
+  // Hydrate filter store from URL params on mount
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    const svc = searchParams.get("svc");
+    const statusParam = searchParams.get("status");
+    const q = searchParams.get("q");
+    const time = searchParams.get("time");
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    const store = useFilterStore.getState();
+    if (svc) store.setService(svc);
+    if (statusParam) {
+      const validGroups = new Set(["2xx", "3xx", "4xx", "5xx"]);
+      statusParam.split(",").forEach((g) => {
+        if (validGroups.has(g)) store.toggleStatusGroup(g as StatusCodeGroup);
+      });
+    }
+    if (q) store.setEndpointSearch(q);
+    if (time) {
+      const validPresets = new Set(["15m", "1h", "6h", "24h", "custom"]);
+      if (validPresets.has(time)) {
+        store.setTimeRange({
+          preset: time as TimeRangePreset,
+          start: start ?? undefined,
+          end: end ?? undefined,
+        });
+      }
+    }
+  }, [searchParams]);
+
+  // Sync filters to URL search params
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.service) params.set("svc", filters.service);
+    if (filters.statusGroups.length > 0) params.set("status", filters.statusGroups.join(","));
+    if (filters.endpointSearch) params.set("q", filters.endpointSearch);
+    if (filters.timeRange.preset !== "15m") params.set("time", filters.timeRange.preset);
+    if (filters.timeRange.start) params.set("start", filters.timeRange.start);
+    if (filters.timeRange.end) params.set("end", filters.timeRange.end);
+
+    const search = params.toString();
+    const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
+    window.history.replaceState(null, "", newUrl);
+  }, [filters]);
+
+  // Reset filters on org/project switch (UX16, AC4)
+  const contextKeyRef = useRef(`${orgSlug}/${projectSlug}`);
+  useEffect(() => {
+    const key = `${orgSlug}/${projectSlug}`;
+    if (contextKeyRef.current !== key) {
+      contextKeyRef.current = key;
+      filterReset();
+    }
+  }, [orgSlug, projectSlug, filterReset]);
 
   // --- Span Inspector state (Story 3.3) ---
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
@@ -331,13 +423,22 @@ export default function LivePage() {
 
   const { status } = useEventStream({
     projectId: projectId ?? "",
-    enabled: projectId !== null,
+    enabled: projectId !== null && !isHistoricalMode,
     onSpan: handleSpan,
   });
 
   // --- History loading (AC1) ---
   const fetchingRef = useRef(false);
   const scrollAdjustRef = useRef(0);
+
+  /** Build filter query params for server-side filtering in historical mode. */
+  const buildFilterParams = useCallback(() => {
+    const params: string[] = [];
+    if (filters.service) params.push(`service=${encodeURIComponent(filters.service)}`);
+    if (filters.statusGroups.length > 0) params.push(`status_groups=${encodeURIComponent(filters.statusGroups.join(","))}`);
+    if (filters.endpointSearch) params.push(`endpoint_search=${encodeURIComponent(filters.endpointSearch)}`);
+    return params.length > 0 ? `&${params.join("&")}` : "";
+  }, [filters.service, filters.statusGroups, filters.endpointSearch]);
 
   const loadHistory = useCallback(async () => {
     if (fetchingRef.current || !projectId || !hasMoreHistory) return;
@@ -348,9 +449,16 @@ export default function LivePage() {
     const oldest = currentSpans.length > 0 ? currentSpans[0].start_time : undefined;
 
     try {
-      const url =
+      let url =
         `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50` +
         (oldest ? `&before=${encodeURIComponent(oldest)}` : "");
+
+      // In historical mode, bound the query to the custom range and apply server-side filters
+      if (isHistoricalMode) {
+        if (filters.timeRange.start) url += `&after=${encodeURIComponent(filters.timeRange.start)}`;
+        url += buildFilterParams();
+      }
+
       const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
       const fetched = res.data;
 
@@ -373,14 +481,65 @@ export default function LivePage() {
       setLoadingHistory(false);
       fetchingRef.current = false;
     }
-  }, [projectId, hasMoreHistory, orgSlug, projectSlug, prependSpans, setLoadingHistory, setHasMoreHistory]);
+  }, [projectId, hasMoreHistory, orgSlug, projectSlug, prependSpans, setLoadingHistory, setHasMoreHistory, isHistoricalMode, filters.timeRange.start, buildFilterParams]);
+
+  // --- Historical mode: initial fetch on entry (AC5) ---
+  const prevHistoricalRef = useRef(false);
+  useEffect(() => {
+    if (isHistoricalMode && !prevHistoricalRef.current && projectId) {
+      // Entering historical mode — reset store and fetch first page
+      reset();
+      setHasMoreHistory(true);
+
+      async function fetchInitialPage() {
+        fetchingRef.current = true;
+        setLoadingHistory(true);
+
+        try {
+          const url =
+            `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50` +
+            `&after=${encodeURIComponent(filters.timeRange.start!)}` +
+            `&before=${encodeURIComponent(filters.timeRange.end!)}` +
+            buildFilterParams();
+
+          const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
+          const fetched = res.data;
+
+          if (fetched.length > 0) {
+            // API returns newest-first; reverse for chronological display
+            const chronological = [...fetched].reverse();
+            prependSpans(chronological);
+
+            const meta = res.meta as { has_more?: boolean };
+            if (!meta.has_more) {
+              setHasMoreHistory(false);
+            }
+          } else {
+            setHasMoreHistory(false);
+          }
+        } catch {
+          // Non-blocking
+        } finally {
+          setLoadingHistory(false);
+          fetchingRef.current = false;
+        }
+      }
+
+      fetchInitialPage();
+    } else if (!isHistoricalMode && prevHistoricalRef.current) {
+      // Leaving historical mode — reset store (SSE will auto-reconnect)
+      reset();
+      setHasMoreHistory(true);
+    }
+    prevHistoricalRef.current = isHistoricalMode;
+  }, [isHistoricalMode, projectId, orgSlug, projectSlug, filters.timeRange.start, filters.timeRange.end, reset, prependSpans, setLoadingHistory, setHasMoreHistory, buildFilterParams]);
 
   // --- TanStack Virtual ---
   const parentRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(0);
 
   const virtualizer = useVirtualizer({
-    count: spans.length,
+    count: filteredSpans.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 20,
@@ -418,15 +577,15 @@ export default function LivePage() {
 
   // Auto-scroll when at bottom and new spans arrive (AC2)
   useEffect(() => {
-    if (isAtBottom && spans.length > 0 && spans.length > prevCountRef.current) {
-      virtualizer.scrollToIndex(spans.length - 1, { align: "end" });
+    if (isAtBottom && filteredSpans.length > 0 && filteredSpans.length > prevCountRef.current) {
+      virtualizer.scrollToIndex(filteredSpans.length - 1, { align: "end" });
     }
-    prevCountRef.current = spans.length;
-  }, [spans.length, isAtBottom, virtualizer]);
+    prevCountRef.current = filteredSpans.length;
+  }, [filteredSpans.length, isAtBottom, virtualizer]);
 
   // Back to Live handler (AC3)
   function handleBackToLive() {
-    virtualizer.scrollToIndex(spans.length - 1, { align: "end" });
+    virtualizer.scrollToIndex(filteredSpans.length - 1, { align: "end" });
     setIsAtBottom(true);
   }
 
@@ -434,10 +593,12 @@ export default function LivePage() {
   const showSkeleton = loading;
   const showEmpty = !loading && status === "connected" && spans.length === 0;
   const showList = !loading && spans.length > 0;
+  const showNoResults = showList && filteredSpans.length === 0;
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
-      <LiveHeader status={status} spanCount={spans.length} />
+      <LiveHeader status={status} spanCount={filteredSpans.length} isHistorical={isHistoricalMode} />
+      <FilterBar services={services} />
       <div className="relative flex flex-1 overflow-hidden">
         {/* Stream list — compresses to 40% when inspector is open (AC1, UX2) */}
         <div className={inspectorOpen ? "w-2/5 hidden md:block" : "w-full"}>
@@ -448,7 +609,15 @@ export default function LivePage() {
             >
               {showSkeleton && <PulseSkeleton />}
               {showEmpty && <EmptyState orgSlug={orgSlug} projectSlug={projectSlug} />}
-              {showList && (
+              {showNoResults && (
+                <div className="flex h-full items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-muted-foreground">No matching requests</p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">Try adjusting your filters</p>
+                  </div>
+                </div>
+              )}
+              {showList && !showNoResults && (
                 <div
                   style={{
                     height: `${virtualizer.getTotalSize()}px`,
@@ -477,10 +646,10 @@ export default function LivePage() {
                   )}
 
                   {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const span = spans[virtualRow.index];
+                    const span = filteredSpans[virtualRow.index];
                     const isNew =
                       virtualRow.index >= prevCountRef.current - 1 &&
-                      virtualRow.index === spans.length - 1;
+                      virtualRow.index === filteredSpans.length - 1;
 
                     return (
                       <div
@@ -522,7 +691,7 @@ export default function LivePage() {
 
             {/* Back to Live floating button (AC2, AC3, UX17) */}
             <AnimatePresence>
-              {!isAtBottom && spans.length > 0 && (
+              {!isAtBottom && filteredSpans.length > 0 && (
                 <motion.button
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}

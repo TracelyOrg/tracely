@@ -20,17 +20,24 @@ router = APIRouter(
 )
 
 
+_VALID_STATUS_GROUPS = {"2xx", "3xx", "4xx", "5xx"}
+
+
 @router.get("")
 async def list_spans(
     project_slug: str = Path(...),
     org_id: uuid.UUID = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
     before: datetime | None = Query(default=None, description="Cursor: return spans before this ISO timestamp"),
+    after: datetime | None = Query(default=None, description="Only return spans with start_time >= this value"),
     limit: int = Query(default=50, ge=1, le=200, description="Max rows to return"),
+    service: str | None = Query(default=None, description="Filter by service name (exact match)"),
+    status_groups: str | None = Query(default=None, description="Comma-separated status groups: 2xx,4xx,5xx"),
+    endpoint_search: str | None = Query(default=None, description="Filter by endpoint path substring (case-insensitive)"),
 ) -> dict:
-    """List historical spans for a project with cursor-based pagination.
+    """List historical spans for a project with cursor-based pagination and filters.
 
-    Used by the Pulse View reverse infinite scroll to load older requests.
+    Used by the Pulse View reverse infinite scroll and filtered queries.
     Returns spans ordered newest-first (DESC). The frontend reverses them
     for chronological prepend.
     """
@@ -46,11 +53,22 @@ async def list_spans(
     if project is None:
         raise NotFoundError("Project not found")
 
+    # Parse comma-separated status groups, ignoring invalid values
+    parsed_groups: list[str] | None = None
+    if status_groups:
+        parsed_groups = [g.strip() for g in status_groups.split(",") if g.strip() in _VALID_STATUS_GROUPS]
+        if not parsed_groups:
+            parsed_groups = None
+
     spans = await span_service.get_span_history(
         org_id=org_id,
         project_id=project.id,
         before=before,
+        after=after,
         limit=limit,
+        service=service,
+        status_groups=parsed_groups,
+        endpoint_search=endpoint_search,
     )
 
     return success(
