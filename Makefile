@@ -42,15 +42,7 @@ test-api:
 lint:
 	cd app && npx tsc --noEmit
 
-# ── SDK (delegates to tracely-sdk/Makefile) ───────────────
-sdk-install:
-	$(MAKE) -C ../tracely-sdk install
 
-sdk-example:
-	$(MAKE) -C ../tracely-sdk example TRACELY_API_KEY=$(TRACELY_API_KEY)
-
-sdk-test:
-	$(MAKE) -C ../tracely-sdk test
 
 # ── Combo Commands ─────────────────────────────────────────
 dev: infra

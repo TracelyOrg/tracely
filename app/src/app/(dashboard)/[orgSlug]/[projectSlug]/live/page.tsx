@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useParams } from "next/navigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen } from "lucide-react";
+import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import type { SpanEvent } from "@/types/span";
@@ -110,41 +110,49 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
 function EmptyState({ orgSlug, projectSlug }: { orgSlug: string; projectSlug: string }) {
   const [fullKey, setFullKey] = useState<string | null>(null);
   const [keyPrefix, setKeyPrefix] = useState<string | null>(null);
-  const generatedRef = useRef(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const initRef = useRef(false);
 
+  const basePath = `/api/orgs/${orgSlug}/projects/${projectSlug}/api-keys`;
+
+  // Generate a new key and display the full value
+  const generateKey = useCallback(async () => {
+    setRegenerating(true);
+    try {
+      const created = await apiFetch<DataEnvelope<ApiKeyCreatedResponse>>(
+        basePath,
+        { method: "POST", body: JSON.stringify({ name: "Default" }) }
+      );
+      setFullKey(created.data.key);
+      setKeyPrefix(created.data.prefix);
+    } catch {
+      // Non-blocking
+    } finally {
+      setRegenerating(false);
+    }
+  }, [basePath]);
+
+  // On mount: if no keys → auto-generate; if keys exist → show prefix
   useEffect(() => {
-    let cancelled = false;
-    const basePath = `/api/orgs/${orgSlug}/projects/${projectSlug}/api-keys`;
+    if (initRef.current) return;
+    initRef.current = true;
 
-    async function loadOrCreateKey() {
+    async function init() {
       try {
         const res = await apiFetch<DataEnvelope<ApiKeyItem[]>>(basePath);
-        if (cancelled) return;
-
         if (res.data.length > 0) {
-          // Existing key — only prefix available
           setKeyPrefix(res.data[0].prefix);
-        } else if (!generatedRef.current) {
-          // No keys yet — auto-generate one to show the full key
-          generatedRef.current = true;
-          const created = await apiFetch<DataEnvelope<ApiKeyCreatedResponse>>(
-            basePath,
-            { method: "POST", body: JSON.stringify({ name: "Default" }) }
-          );
-          if (!cancelled) {
-            setFullKey(created.data.key);
-            setKeyPrefix(created.data.prefix);
-          }
+        } else {
+          generateKey();
         }
       } catch {
         // Non-blocking
       }
     }
+    init();
+  }, [basePath, generateKey]);
 
-    loadOrCreateKey();
-    return () => { cancelled = true; };
-  }, [orgSlug, projectSlug]);
-
+  const hasFullKey = fullKey !== null;
   const displayKey = fullKey ?? (keyPrefix ? `${keyPrefix}...` : "your_api_key_here");
   const installSnippet = `pip install tracely-sdk
 export TRACELY_API_KEY="${displayKey}"`;
@@ -164,9 +172,21 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Terminal className="size-4 text-muted-foreground" />
-            1. Install &amp; configure
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Terminal className="size-4 text-muted-foreground" />
+              1. Install &amp; configure
+            </div>
+            {!hasFullKey && keyPrefix && (
+              <button
+                onClick={generateKey}
+                disabled={regenerating}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+              >
+                <RefreshCw className={`size-3 ${regenerating ? "animate-spin" : ""}`} />
+                {regenerating ? "Generating..." : "Regenerate key"}
+              </button>
+            )}
           </div>
           <CodeBlock code={installSnippet} language="shell" />
         </div>
