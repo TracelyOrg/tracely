@@ -60,7 +60,7 @@ export const ChildSpanRow = memo(function ChildSpanRow({
       style={{ paddingLeft: "16px", paddingRight: "16px" }}
     >
       {/* Timestamp — fixed width (matches StreamRow) */}
-      <span className="shrink-0 w-[7ch] text-muted-foreground/70 tabular-nums">
+      <span className="shrink-0 w-[60px] text-muted-foreground/70 tabular-nums">
         {formatTimestamp(span.start_time)}
       </span>
 

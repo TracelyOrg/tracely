@@ -73,7 +73,7 @@ export const StreamRow = memo(function StreamRow({
       )}
     >
       {/* Timestamp — fixed width */}
-      <span className="shrink-0 w-[7ch] text-xs text-muted-foreground/70 tabular-nums">
+      <span className="shrink-0 w-[60px] text-xs text-muted-foreground/70 tabular-nums">
         {!isPending ? formatTimestamp(span.start_time) : "\u00A0"}
       </span>
 
