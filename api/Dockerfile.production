@@ -1,0 +1,54 @@
+# ---- builder stage: install dependencies ----
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy only dependency metadata first for layer caching
+COPY pyproject.toml .
+
+# Install dependencies into a virtual-env so we can copy them cleanly
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --no-cache-dir .
+
+# Copy source code and install the project itself
+COPY app/ app/
+COPY alembic/ alembic/
+COPY alembic.ini .
+
+RUN pip install --no-cache-dir .
+
+# ---- runtime stage: minimal image ----
+FROM python:3.12-slim AS runtime
+
+# Prevent Python from writing .pyc files and enable unbuffered stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Create a non-root user
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid appuser --shell /bin/sh appuser
+
+# Copy virtualenv from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application source and alembic config
+COPY --from=builder /build/app/ app/
+COPY --from=builder /build/alembic/ alembic/
+COPY --from=builder /build/alembic.ini .
+
+# Switch to non-root user
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --loop uvloop --no-access-log"]
