@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["stream"])
 
-HEARTBEAT_INTERVAL_S = 15
+HEARTBEAT_INTERVAL_S = 5  # reduced from 15s for better connection stability
 
 
 async def _verify_project_access(

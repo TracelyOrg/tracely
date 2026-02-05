@@ -7,8 +7,8 @@ const INITIAL_BACKOFF_MS = 100;
 const MAX_BACKOFF_MS = 5000;
 const BACKOFF_MULTIPLIER = 2;
 
-// Heartbeat timeout: if no heartbeat in 60s (2x the 30s interval), reconnect
-const HEARTBEAT_TIMEOUT_MS = 60_000;
+// Heartbeat timeout: if no heartbeat in 15s (3x the 5s interval), reconnect
+const HEARTBEAT_TIMEOUT_MS = 15_000;
 
 export type StreamStatus = "connecting" | "connected" | "disconnected";
 
@@ -125,6 +125,25 @@ export function useEventStream({
       clearTimers();
     };
   }, [connect, clearTimers]);
+
+  // Reconnect immediately when tab becomes visible (handles browser throttling)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // Check if connection is stale or closed
+        const es = eventSourceRef.current;
+        if (!es || es.readyState === EventSource.CLOSED) {
+          backoffRef.current = INITIAL_BACKOFF_MS; // Reset backoff for fresh start
+          connectRef.current?.();
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   return { status, firstEventReceived };
 }
