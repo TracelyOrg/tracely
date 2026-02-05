@@ -213,11 +213,12 @@ function RequestTab({ detail }: { detail: SpanDetail }) {
     return params;
   }, [detail.attributes]);
 
-  // Build full URL with query params
+  // Build full URL with query params (strip method prefix if present in span_name)
   const fullUrl = useMemo(() => {
+    const path = stripMethodFromPath(detail.span_name, detail.http_method);
     const queryString = buildQueryString(detail.attributes);
-    return `${detail.span_name}${queryString}`;
-  }, [detail.span_name, detail.attributes]);
+    return `${path}${queryString}`;
+  }, [detail.span_name, detail.http_method, detail.attributes]);
 
   return (
     <div className="space-y-4 p-4">
@@ -450,6 +451,14 @@ function buildQueryString(attributes: Record<string, string>): string {
   return params.length > 0 ? `?${params.join("&")}` : "";
 }
 
+/** Strip HTTP method prefix from span_name if present (e.g., "GET /path" -> "/path") */
+function stripMethodFromPath(spanName: string, method: string): string {
+  if (method && spanName.startsWith(`${method} `)) {
+    return spanName.slice(method.length + 1);
+  }
+  return spanName;
+}
+
 export function SpanInspector({ detail, loading, error, onClose, orgSlug, projectSlug }: SpanInspectorProps) {
   const isError = detail
     ? detail.status_code === "ERROR" || detail.http_status_code >= 500
@@ -459,11 +468,12 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
     isError ? "response" : "request"
   );
 
-  // Build full URL with query params for display
+  // Build full URL with query params for display (strip method prefix if present in span_name)
   const fullUrl = useMemo(() => {
     if (!detail) return "";
+    const path = stripMethodFromPath(detail.span_name, detail.http_method);
     const queryString = buildQueryString(detail.attributes);
-    return `${detail.span_name}${queryString}`;
+    return `${path}${queryString}`;
   }, [detail]);
 
   // Fetch trace spans for the Trace Waterfall tab

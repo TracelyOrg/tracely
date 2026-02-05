@@ -41,9 +41,13 @@ export const StreamRow = memo(function StreamRow({
   onClick,
 }: StreamRowProps) {
   const isPending = span.span_type === "pending_span";
-  // Use span_name (actual path with resolved params) instead of http_route (template)
-  const route = span.span_name || span.http_route;
   const method = span.http_method || "";
+  // Use span_name (actual path with resolved params) instead of http_route (template)
+  // span_name may already include the method (e.g., "GET /v4/users/me"), so strip it if present
+  const rawRoute = span.span_name || span.http_route;
+  const route = method && rawRoute.startsWith(`${method} `)
+    ? rawRoute.slice(method.length + 1)
+    : rawRoute;
   const serviceName = span.service_name || "default";
 
   const ariaLabel = isPending
