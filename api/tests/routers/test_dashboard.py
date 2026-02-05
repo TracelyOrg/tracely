@@ -11,7 +11,14 @@ from app.models.org_member import OrgMember
 from app.models.organization import Organization
 from app.models.project import Project
 from app.models.user import User
-from app.schemas.dashboard import HealthResponse, HealthStatus, ServiceHealth
+from app.schemas.dashboard import (
+    DataPoint,
+    HealthResponse,
+    HealthStatus,
+    LiveDashboardResponse,
+    ServiceHealth,
+    ServiceStatus,
+)
 
 
 @pytest.fixture
@@ -324,3 +331,181 @@ async def test_clickhouse_query_includes_org_id_filter():
     call_args = mock_to_thread.call_args
     query_params = call_args.kwargs.get("parameters", call_args[1].get("parameters", {}))
     assert str(org_id) in str(query_params.get("org_id", ""))
+
+
+# ─── GET /api/orgs/{org_slug}/projects/{slug}/dashboard/live (Story 4.2) ───
+
+
+def test_live_dashboard_endpoint_returns_envelope_format(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Live dashboard endpoint returns correct envelope format (Task 6.1)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    with (
+        patch("app.routers.dashboard.project_service") as mock_project_svc,
+        patch("app.routers.dashboard.dashboard_service") as mock_dashboard_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_dashboard_svc.get_live_dashboard = AsyncMock(
+            return_value=LiveDashboardResponse(
+                requests_per_minute=[],
+                error_rate=0.0,
+                p95_latency=0.0,
+                services=[],
+            )
+        )
+
+        response = client.get("/api/orgs/acme-corp/projects/my-api/dashboard/live")
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert "meta" in body
+    # Verify all required fields are present (AC1)
+    assert "requests_per_minute" in body["data"]
+    assert "error_rate" in body["data"]
+    assert "p95_latency" in body["data"]
+    assert "services" in body["data"]
+
+
+def test_live_dashboard_returns_all_fields(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Live dashboard returns sparkline data and aggregates (Task 6.1)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    mock_response = LiveDashboardResponse(
+        requests_per_minute=[
+            DataPoint(timestamp=datetime.now(timezone.utc), value=100.0),
+            DataPoint(timestamp=datetime.now(timezone.utc), value=120.0),
+        ],
+        error_rate=1.5,
+        p95_latency=250.0,
+        services=[
+            ServiceStatus(
+                name="api-gateway",
+                status=HealthStatus.healthy,
+                request_rate=50.0,
+                error_rate=0.5,
+                p95_latency=100.0,
+            ),
+        ],
+    )
+
+    with (
+        patch("app.routers.dashboard.project_service") as mock_project_svc,
+        patch("app.routers.dashboard.dashboard_service") as mock_dashboard_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_dashboard_svc.get_live_dashboard = AsyncMock(return_value=mock_response)
+
+        response = client.get("/api/orgs/acme-corp/projects/my-api/dashboard/live")
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    data = body["data"]
+
+    # Verify sparkline data (Task 3.2)
+    assert len(data["requests_per_minute"]) == 2
+    assert data["requests_per_minute"][0]["value"] == 100.0
+
+    # Verify aggregates (Task 3.3)
+    assert data["error_rate"] == 1.5
+    assert data["p95_latency"] == 250.0
+
+    # Verify services (Task 3.4)
+    assert len(data["services"]) == 1
+    assert data["services"][0]["name"] == "api-gateway"
+
+
+def test_live_dashboard_unauthenticated(client):
+    """Unauthenticated request to live dashboard returns 401."""
+    response = client.get("/api/orgs/acme-corp/projects/my-api/dashboard/live")
+    assert response.status_code == 401
+
+
+# ─── Live dashboard Redis caching tests (Task 6.2) ───────────────────
+
+
+@pytest.mark.asyncio
+async def test_live_dashboard_uses_cache():
+    """Live dashboard returns cached data when available (Task 6.2)."""
+    from app.services import dashboard_service
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    cached_response = LiveDashboardResponse(
+        requests_per_minute=[
+            DataPoint(timestamp=datetime.now(timezone.utc), value=50.0),
+        ],
+        error_rate=2.0,
+        p95_latency=300.0,
+        services=[],
+    )
+
+    with patch("app.services.dashboard_service.cache_get") as mock_cache_get:
+        mock_cache_get.return_value = cached_response.model_dump_json()
+
+        result = await dashboard_service.get_live_dashboard(org_id, project_id)
+
+    assert len(result.requests_per_minute) == 1
+    assert result.error_rate == 2.0
+    mock_cache_get.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_live_dashboard_caches_result():
+    """Live dashboard caches ClickHouse query result with 5s TTL (Task 6.2)."""
+    from app.services import dashboard_service
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    # Mock ClickHouse results for all three queries
+    mock_sparkline_result = MagicMock()
+    mock_sparkline_result.result_rows = [
+        (datetime.now(timezone.utc), 100),
+    ]
+
+    mock_aggregates_result = MagicMock()
+    mock_aggregates_result.result_rows = [
+        (500, 5, 200.0),  # total_requests, total_errors, p95_ms
+    ]
+
+    mock_services_result = MagicMock()
+    mock_services_result.result_rows = [
+        ("api-service", 500, 5, 200.0),
+    ]
+
+    with (
+        patch("app.services.dashboard_service.cache_get") as mock_cache_get,
+        patch("app.services.dashboard_service.cache_set") as mock_cache_set,
+        patch("app.services.dashboard_service.get_clickhouse_client") as mock_ch,
+        patch("asyncio.to_thread") as mock_to_thread,
+    ):
+        mock_cache_get.return_value = None  # Cache miss
+        # Return different results for each query
+        mock_to_thread.side_effect = [
+            mock_sparkline_result,
+            mock_aggregates_result,
+            mock_services_result,
+        ]
+
+        result = await dashboard_service.get_live_dashboard(org_id, project_id)
+
+    assert len(result.requests_per_minute) == 1
+    assert len(result.services) == 1
+    mock_cache_set.assert_called_once()
+    # Verify TTL is 5 seconds (AR5 for live dashboard)
+    call_args = mock_cache_set.call_args
+    assert call_args[0][2] == 5  # TTL argument

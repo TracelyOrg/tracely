@@ -2,21 +2,37 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import { Sun, Moon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { DataEnvelope } from "@/types/api";
 import BreadcrumbPicker from "@/components/layout/BreadcrumbPicker";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
+interface UserData {
+  id: string;
+  email: string;
+  full_name: string | null;
+  onboarding_completed: boolean;
+  email_verified: boolean;
+  created_at: string;
+}
+
 interface AuthUser {
-  user: {
-    id: string;
-    email: string;
-    full_name: string | null;
-    onboarding_completed: boolean;
-    email_verified: boolean;
-    created_at: string;
-  };
+  user: UserData;
+}
+
+/** Get user initials from full name or email */
+function getInitials(fullName: string | null, email: string): string {
+  if (fullName) {
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return fullName.slice(0, 2).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
 }
 
 interface OrgItem {
@@ -43,6 +59,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const [authenticated, setAuthenticated] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [user, setUser] = useState<UserData | null>(null);
 
   const onOnboarding =
     pathname.startsWith("/onboarding") || pathname.includes("/onboarding");
@@ -82,6 +99,16 @@ export default function DashboardLayout({
     }, [currentOrgSlug, currentProjectSlug, router])
   );
 
+  // G→D navigates to Dashboard when org/project context is available (Story 4.2, AC3)
+  useKeyboardShortcut(
+    ["g", "d"],
+    useCallback(() => {
+      if (currentOrgSlug && currentProjectSlug) {
+        router.push(`/${currentOrgSlug}/${currentProjectSlug}/dashboard`);
+      }
+    }, [currentOrgSlug, currentProjectSlug, router])
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -98,6 +125,7 @@ export default function DashboardLayout({
         }
 
         setAuthenticated(true);
+        setUser(authRes.data.user);
 
         // Auto-accept pending invitation from sessionStorage (Story 6-5)
         const pendingToken = sessionStorage.getItem("invitation_token");
@@ -177,7 +205,54 @@ export default function DashboardLayout({
       {!onOnboarding && (
         <header className="flex h-12 items-center border-b px-4">
           <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-4">
+            {/* Top bar navigation menu (Story 4.2) */}
+            {currentOrgSlug && currentProjectSlug && (
+              <nav className="flex items-center gap-6" aria-label="Main navigation">
+                <Link
+                  href={`/${currentOrgSlug}/${currentProjectSlug}/live`}
+                  className={cn(
+                    "relative py-3 text-sm font-medium transition-colors",
+                    pathname.endsWith("/live")
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Live
+                  {pathname.endsWith("/live") && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </Link>
+                <Link
+                  href={`/${currentOrgSlug}/${currentProjectSlug}/dashboard`}
+                  className={cn(
+                    "relative py-3 text-sm font-medium transition-colors",
+                    pathname.includes("/dashboard")
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Dashboard
+                  {pathname.includes("/dashboard") && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </Link>
+                <Link
+                  href={`/${currentOrgSlug}/${currentProjectSlug}/settings`}
+                  className={cn(
+                    "relative py-3 text-sm font-medium transition-colors",
+                    pathname.endsWith("/settings")
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Settings
+                  {pathname.endsWith("/settings") && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </Link>
+              </nav>
+            )}
             <button
               type="button"
               onClick={toggleTheme}
@@ -186,6 +261,15 @@ export default function DashboardLayout({
             >
               {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </button>
+            {/* User avatar */}
+            {user && (
+              <div
+                className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium"
+                title={user.full_name || user.email}
+              >
+                {getInitials(user.full_name, user.email)}
+              </div>
+            )}
           </div>
         </header>
       )}

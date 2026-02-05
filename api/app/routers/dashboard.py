@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.dependencies import get_current_org
-from app.schemas.dashboard import HealthResponse
+from app.schemas.dashboard import HealthResponse, LiveDashboardResponse
 from app.services import dashboard_service, project_service
 from app.utils.envelope import success
 
@@ -42,3 +42,32 @@ async def get_project_health(
     health = await dashboard_service.get_project_health(org_id, project.id)
 
     return success(health.model_dump(mode="json"))
+
+
+@router.get("/dashboard/live")
+async def get_live_dashboard(
+    org_slug: str = Path(...),
+    project_slug: str = Path(...),
+    org_id=Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Get live dashboard metrics for a project (Story 4.2).
+
+    Returns real-time metrics for the live dashboard view:
+    - requests_per_minute: Time series for sparkline (last 15 minutes, 1-min granularity)
+    - error_rate: Current error rate percentage
+    - p95_latency: Current P95 latency in milliseconds
+    - services: List of service status indicators
+
+    Data is cached in Redis with 5s TTL. Sparkline data comes from
+    ClickHouse metrics_1m view, current aggregates from Redis cache.
+
+    Multi-tenant isolation enforced via org_id scoping.
+    """
+    # Get project by slug to get the UUID
+    project = await project_service.get_project_by_slug(db, org_id, project_slug)
+
+    # Fetch live dashboard data
+    live_data = await dashboard_service.get_live_dashboard(org_id, project.id)
+
+    return success(live_data.model_dump(mode="json"))

@@ -61,8 +61,13 @@ AS SELECT
     quantileState(0.95)(duration_ms) AS p95_duration,
     maxState(duration_ms) AS max_duration
 FROM spans
-WHERE span_type = 'span' AND kind = 'SERVER'
+WHERE span_type = 'span' AND kind IN ('SERVER', 'INTERNAL')
 GROUP BY org_id, project_id, service_name, http_route, time_bucket
+"""
+
+# Migration DDL to recreate the materialized view with updated filter
+METRICS_1M_MIGRATE_DDL = """
+DROP VIEW IF EXISTS metrics_1m
 """
 
 
@@ -113,7 +118,9 @@ async def init_clickhouse() -> None:
     await asyncio.to_thread(_client.command, SPANS_TABLE_DDL)
     logger.info("ClickHouse: spans table ready")
 
-    # Create metrics_1m materialized view
+    # Recreate metrics_1m materialized view (drop first to apply filter changes)
+    # This ensures the view includes both SERVER and INTERNAL spans
+    await asyncio.to_thread(_client.command, METRICS_1M_MIGRATE_DDL)
     await asyncio.to_thread(_client.command, METRICS_1M_VIEW_DDL)
     logger.info("ClickHouse: metrics_1m materialized view ready")
 
