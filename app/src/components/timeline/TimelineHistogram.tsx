@@ -40,32 +40,23 @@ interface CustomTooltipProps {
   granularity: number;
 }
 
-function CustomTooltip({ active, payload, label, granularity }: CustomTooltipProps) {
-  if (!active || !payload || !label) return null;
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  if (!active || !payload) return null;
 
-  const timestamp = formatBucketTimestamp(label, granularity);
   const success = payload.find((p) => p.name === "successCount")?.value ?? 0;
   const errors = payload.find((p) => p.name === "errorCount")?.value ?? 0;
-  const total = success + errors;
 
   return (
-    <div className="rounded-md border border-border bg-popover px-3 py-2 text-sm shadow-md">
-      <div className="font-medium text-foreground">{timestamp}</div>
-      <div className="mt-1 space-y-0.5 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span className="text-muted-foreground">Success:</span>
-          <span className="font-medium text-foreground">{success}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-red-500" />
-          <span className="text-muted-foreground">Errors:</span>
-          <span className="font-medium text-foreground">{errors}</span>
-        </div>
-        <div className="mt-1 border-t border-border pt-1">
-          <span className="text-muted-foreground">Total:</span>
-          <span className="ml-1 font-medium text-foreground">{total}</span>
-        </div>
+    <div className="rounded border border-border bg-popover px-2 py-1 text-xs shadow-md">
+      <div className="flex items-center gap-3">
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span className="text-foreground">{success}</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+          <span className="text-foreground">{errors}</span>
+        </span>
       </div>
     </div>
   );
