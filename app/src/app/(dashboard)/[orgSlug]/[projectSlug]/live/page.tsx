@@ -16,6 +16,7 @@ import { matchesFilters } from "@/lib/filterUtils";
 import { StreamRow } from "@/components/pulse/StreamRow";
 import { ChildSpanRow } from "@/components/pulse/ChildSpanRow";
 import { SpanInspector } from "@/components/pulse/SpanInspector";
+import { TimelineBar } from "@/components/timeline";
 import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
 type DisplayItem =
@@ -460,6 +461,14 @@ function LivePageContent() {
       setTimeRange({ preset: "custom", start: filters.timeRange.start, end: iso });
     },
     [setTimeRange, filters.timeRange.start]
+  );
+
+  // Timeline brush selection handler
+  const handleBrushSelection = useCallback(
+    (start: string, end: string) => {
+      setTimeRange({ preset: "custom", start, end });
+    },
+    [setTimeRange]
   );
 
   // Filter root spans only (children inherit parent visibility)
@@ -934,6 +943,7 @@ function LivePageContent() {
         onCustomStart={handleCustomStart}
         onCustomEnd={handleCustomEnd}
       />
+      <TimelineBar onBrushSelection={handleBrushSelection} />
       <div ref={containerRef} className="relative flex flex-1 overflow-hidden">
         {/* Stream list — compresses when inspector is open */}
         <div
