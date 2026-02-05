@@ -14,6 +14,15 @@ import {
 } from "recharts";
 import { formatBucketTimestamp, type TimeBucket } from "@/lib/timelineUtils";
 
+/** Format Y-axis values: 1000 -> "1k", 2500 -> "2.5k" */
+function formatYAxis(value: number): string {
+  if (value >= 1000) {
+    const k = value / 1000;
+    return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
+  }
+  return String(value);
+}
+
 interface TimelineHistogramProps {
   buckets: TimeBucket[];
   granularity: number;
@@ -112,7 +121,7 @@ export function TimelineHistogram({
     <ResponsiveContainer width="100%" height="100%">
       <BarChart
         data={buckets}
-        margin={{ top: 4, right: 8, left: 8, bottom: 0 }}
+        margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
         barGap={0}
         barCategoryGap={1}
       >
@@ -122,20 +131,28 @@ export function TimelineHistogram({
           domain={[rangeStart, rangeEnd]}
           ticks={xAxisTicks}
           tickFormatter={(ts) => formatBucketTimestamp(ts, granularity)}
-          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-          axisLine={{ stroke: "hsl(var(--border))" }}
-          tickLine={{ stroke: "hsl(var(--border))" }}
+          tick={{ fontSize: 10, fill: "#a1a1aa" }}
+          axisLine={{ stroke: "#3f3f46" }}
+          tickLine={{ stroke: "#3f3f46" }}
           interval="preserveStartEnd"
         />
-        <YAxis hide domain={[0, "auto"]} />
+        <YAxis
+          domain={[0, "auto"]}
+          tickFormatter={formatYAxis}
+          tick={{ fontSize: 10, fill: "#a1a1aa" }}
+          axisLine={{ stroke: "#3f3f46" }}
+          tickLine={{ stroke: "#3f3f46" }}
+          width={30}
+          allowDecimals={false}
+        />
         <Tooltip
           content={<CustomTooltip granularity={granularity} />}
-          cursor={{ fill: "hsl(var(--accent))", opacity: 0.3 }}
+          cursor={{ fill: "#27272a", opacity: 0.5 }}
         />
         <Bar
           dataKey="successCount"
           stackId="requests"
-          fill="hsl(var(--emerald-500, 142.1 76.2% 36.3%))"
+          fill="#10b981"
           radius={[0, 0, 0, 0]}
           isAnimationActive={false}
         >
@@ -155,7 +172,7 @@ export function TimelineHistogram({
         <Bar
           dataKey="errorCount"
           stackId="requests"
-          fill="hsl(var(--red-500, 0 84.2% 60.2%))"
+          fill="#ef4444"
           radius={[2, 2, 0, 0]}
           isAnimationActive={false}
         >
@@ -172,19 +189,10 @@ export function TimelineHistogram({
             />
           ))}
         </Bar>
-        <Brush
-          dataKey="timestamp"
-          height={16}
-          stroke="hsl(var(--primary))"
-          fill="hsl(var(--background))"
-          travellerWidth={8}
-          onChange={handleBrushChange}
-          tickFormatter={() => ""}
-        />
         {isLive && (
           <ReferenceLine
             x={Date.now()}
-            stroke="hsl(var(--primary))"
+            stroke="#22c55e"
             strokeWidth={2}
             strokeDasharray="4 2"
           />

@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Loader, Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/formatDuration";
 import type { SpanEvent } from "@/types/span";
 
 function statusColorClass(code: number): string {
@@ -52,7 +53,7 @@ export const StreamRow = memo(function StreamRow({
 
   const ariaLabel = isPending
     ? `${method} ${route}, in progress`
-    : `${method} ${route}, status ${span.http_status_code}, ${Math.round(span.duration_ms)} milliseconds`;
+    : `${method} ${route}, status ${span.http_status_code}, ${formatDuration(span.duration_ms)}`;
 
   function handleChevronClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -129,7 +130,7 @@ export const StreamRow = memo(function StreamRow({
 
       {/* Duration — fixed width */}
       <span className="shrink-0 w-16 text-right text-xs text-muted-foreground tabular-nums">
-        {!isPending ? `${Math.round(span.duration_ms)}ms` : "\u00A0"}
+        {!isPending ? formatDuration(span.duration_ms) : "\u00A0"}
       </span>
     </div>
   );

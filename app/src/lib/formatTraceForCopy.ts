@@ -1,4 +1,5 @@
 import type { SpanDetail, SpanEvent } from "@/types/span";
+import { formatDuration } from "@/lib/formatDuration";
 
 /**
  * Format JSON for display (pretty-print if valid JSON, otherwise return raw).
@@ -35,7 +36,7 @@ function buildSpanTreeText(spans: SpanEvent[]): string {
   if (!root) {
     // No root found — just list spans flat
     return spans
-      .map((s) => `  ${s.span_name || s.http_route || s.span_id} (${s.duration_ms.toFixed(1)}ms)`)
+      .map((s) => `  ${s.span_name || s.http_route || s.span_id} (${formatDuration(s.duration_ms)})`)
       .join("\n");
   }
 
@@ -46,7 +47,7 @@ function buildSpanTreeText(spans: SpanEvent[]): string {
     const label = span.span_name || span.http_route || span.span_id;
     const method = span.http_method ? `${span.http_method} ` : "";
     const status = span.http_status_code ? ` → ${span.http_status_code}` : "";
-    lines.push(`${indent}${method}${label}${status} (${span.duration_ms.toFixed(1)}ms)`);
+    lines.push(`${indent}${method}${label}${status} (${formatDuration(span.duration_ms)})`);
 
     const children = childrenMap.get(span.span_id) ?? [];
     for (const child of children) {
@@ -80,7 +81,7 @@ export function formatTraceForCopy(detail: SpanDetail, traceSpans?: SpanEvent[])
   sections.push(`Trace ID: ${detail.trace_id}`);
   sections.push(`Span ID: ${detail.span_id}`);
   sections.push(`Service: ${detail.service_name}`);
-  sections.push(`${detail.http_method} ${detail.http_route} → ${detail.http_status_code} (${detail.duration_ms.toFixed(1)}ms)`);
+  sections.push(`${detail.http_method} ${detail.http_route} → ${detail.http_status_code} (${formatDuration(detail.duration_ms)})`);
   sections.push(`Time: ${detail.start_time}`);
 
   // Span tree (if trace spans provided)

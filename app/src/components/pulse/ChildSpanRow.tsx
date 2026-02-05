@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/formatDuration";
 import type { SpanEvent } from "@/types/span";
 
 function statusColorClass(code: number): string {
@@ -41,7 +42,7 @@ export const ChildSpanRow = memo(function ChildSpanRow({
   const serviceName = span.service_name || "default";
   const hasError = span.http_status_code >= 400;
 
-  const ariaLabel = `Child span: ${operationName}, status ${span.http_status_code || 0}, ${Math.round(span.duration_ms)} milliseconds`;
+  const ariaLabel = `Child span: ${operationName}, status ${span.http_status_code || 0}, ${formatDuration(span.duration_ms)}`;
 
   return (
     <div
@@ -102,7 +103,7 @@ export const ChildSpanRow = memo(function ChildSpanRow({
 
       {/* Duration — fixed width (matches StreamRow) */}
       <span className="shrink-0 w-16 text-right text-muted-foreground tabular-nums">
-        {Math.round(span.duration_ms)}ms
+        {formatDuration(span.duration_ms)}
       </span>
     </div>
   );

@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDuration } from "@/lib/formatDuration";
 import type { SpanDetail } from "@/types/span";
 import { useTraceSpans } from "@/hooks/useTraceSpans";
 import { TraceWaterfall } from "@/components/pulse/TraceWaterfall";
@@ -341,7 +342,7 @@ function ResponseTab({ detail }: { detail: SpanDetail }) {
         </div>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Clock className="size-3.5" />
-          <span className="font-mono">{detail.duration_ms.toFixed(1)}ms</span>
+          <span className="font-mono">{formatDuration(detail.duration_ms)}</span>
         </div>
       </div>
 
@@ -353,7 +354,7 @@ function ResponseTab({ detail }: { detail: SpanDetail }) {
         <div className="space-y-1 text-xs font-mono">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Total duration</span>
-            <span>{detail.duration_ms.toFixed(1)}ms</span>
+            <span>{formatDuration(detail.duration_ms)}</span>
           </div>
           {detail.start_time && detail.end_time && (
             <div className="flex justify-between">
@@ -520,7 +521,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
                 )}
                 <span className="font-mono">
                   <Clock className="mr-0.5 inline size-3" />
-                  {detail.duration_ms.toFixed(1)}ms
+                  {formatDuration(detail.duration_ms)}
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground font-mono">

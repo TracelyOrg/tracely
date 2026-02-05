@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildSpanTree, flattenTree, getAllSpanIds } from "@/lib/spanTree";
+import { formatDuration } from "@/lib/formatDuration";
 import type { TraceSpanEvent, SpanTreeNode, SpanLogEvent } from "@/types/span";
 
 // --- Types ---
@@ -42,12 +43,6 @@ function KindIcon({ kind }: { kind: string }) {
   }
 }
 
-/** Format duration for display */
-function formatDuration(ms: number): string {
-  if (ms < 1) return `${(ms * 1000).toFixed(0)}us`;
-  if (ms < 1000) return `${ms.toFixed(1)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
 
 /** Get the waterfall bar color based on status */
 function barColor(node: SpanTreeNode): string {

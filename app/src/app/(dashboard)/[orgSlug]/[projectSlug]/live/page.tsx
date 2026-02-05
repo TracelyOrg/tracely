@@ -1041,9 +1041,9 @@ function LivePageContent() {
                       >
                         {isNew ? (
                           <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ duration: 0.15 }}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
                           >
                             {rowContent}
                           </motion.div>
@@ -1077,30 +1077,40 @@ function LivePageContent() {
         </div>
 
         {/* Resize handle + Span Inspector panel */}
-        {inspectorOpen && (
-          <>
-            {/* Drag handle */}
-            <div
-              onMouseDown={startResize}
-              className="hidden md:flex w-1.5 shrink-0 cursor-col-resize items-center justify-center hover:bg-primary/10 active:bg-primary/20 transition-colors"
-            >
-              <div className="h-8 w-0.5 rounded-full bg-border" />
-            </div>
-            <div
-              className="absolute inset-0 z-30 md:relative md:z-auto"
-              style={{ width: `${inspectorWidth}%` }}
-            >
-              <SpanInspector
-                detail={spanDetail}
-                loading={detailLoading}
-                error={detailError}
-                onClose={() => setInspectorSpanId(null)}
-                orgSlug={orgSlug}
-                projectSlug={projectSlug}
-              />
-            </div>
-          </>
-        )}
+        <AnimatePresence>
+          {inspectorOpen && (
+            <>
+              {/* Drag handle */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                onMouseDown={startResize}
+                className="hidden md:flex w-1.5 shrink-0 cursor-col-resize items-center justify-center hover:bg-primary/10 active:bg-primary/20 transition-colors"
+              >
+                <div className="h-8 w-0.5 rounded-full bg-border" />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 40, scale: 0.98 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 40, scale: 0.98 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="absolute inset-0 z-30 md:relative md:z-auto"
+                style={{ width: `${inspectorWidth}%` }}
+              >
+                <SpanInspector
+                  detail={spanDetail}
+                  loading={detailLoading}
+                  error={detailError}
+                  onClose={() => setInspectorSpanId(null)}
+                  orgSlug={orgSlug}
+                  projectSlug={projectSlug}
+                />
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
