@@ -6,6 +6,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock, Search, ChevronDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { DataEnvelope } from "@/types/api";
 import type { SpanEvent, TimeRangePreset } from "@/types/span";
 import { useEventStream } from "@/hooks/useEventStream";
@@ -461,14 +462,6 @@ function LivePageContent() {
       setTimeRange({ preset: "custom", start: filters.timeRange.start, end: iso });
     },
     [setTimeRange, filters.timeRange.start]
-  );
-
-  // Timeline brush selection handler
-  const handleBrushSelection = useCallback(
-    (start: string, end: string) => {
-      setTimeRange({ preset: "custom", start, end });
-    },
-    [setTimeRange]
   );
 
   // Filter root spans only (children inherit parent visibility)
@@ -943,12 +936,17 @@ function LivePageContent() {
         onCustomStart={handleCustomStart}
         onCustomEnd={handleCustomEnd}
       />
-      <TimelineBar onBrushSelection={handleBrushSelection} />
+      <TimelineBar />
       <div ref={containerRef} className="relative flex flex-1 overflow-hidden">
         {/* Stream list — compresses when inspector is open */}
         <div
-          className={inspectorOpen ? "hidden md:block" : "w-full"}
-          style={inspectorOpen ? { width: `${100 - inspectorWidth}%` } : undefined}
+          className={cn(
+            inspectorOpen ? "hidden md:block" : "w-full"
+          )}
+          style={{
+            width: inspectorOpen ? `${100 - inspectorWidth}%` : "100%",
+            transition: "width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)"
+          }}
         >
           <div className="relative h-full">
             <div
@@ -1085,17 +1083,17 @@ function LivePageContent() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
                 onMouseDown={startResize}
                 className="hidden md:flex w-1.5 shrink-0 cursor-col-resize items-center justify-center hover:bg-primary/10 active:bg-primary/20 transition-colors"
               >
                 <div className="h-8 w-0.5 rounded-full bg-border" />
               </motion.div>
               <motion.div
-                initial={{ opacity: 0, x: 40, scale: 0.98 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 40, scale: 0.98 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
                 className="absolute inset-0 z-30 md:relative md:z-auto"
                 style={{ width: `${inspectorWidth}%` }}
               >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -8,8 +8,6 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  Brush,
-  Cell,
   ReferenceLine,
 } from "recharts";
 import { formatBucketTimestamp, type TimeBucket } from "@/lib/timelineUtils";
@@ -29,7 +27,6 @@ interface TimelineHistogramProps {
   rangeStart: number;
   rangeEnd: number;
   isLive: boolean;
-  onBrushChange?: (startIndex: number, endIndex: number) => void;
 }
 
 interface CustomTooltipProps {
@@ -80,10 +77,7 @@ export function TimelineHistogram({
   rangeStart,
   rangeEnd,
   isLive,
-  onBrushChange,
 }: TimelineHistogramProps) {
-  const [brushIndices, setBrushIndices] = useState<{ start: number; end: number } | null>(null);
-
   // Format ticks for X-axis (show ~5-7 ticks)
   const xAxisTicks = useMemo(() => {
     if (buckets.length === 0) return [];
@@ -99,16 +93,6 @@ export function TimelineHistogram({
     return ticks;
   }, [buckets]);
 
-  const handleBrushChange = useCallback(
-    (brushData: { startIndex?: number; endIndex?: number }) => {
-      if (brushData.startIndex !== undefined && brushData.endIndex !== undefined) {
-        setBrushIndices({ start: brushData.startIndex, end: brushData.endIndex });
-        onBrushChange?.(brushData.startIndex, brushData.endIndex);
-      }
-    },
-    [onBrushChange]
-  );
-
   if (buckets.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -118,8 +102,9 @@ export function TimelineHistogram({
   }
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart
+    <div className="h-full w-full [&_.recharts-wrapper]:!outline-none [&_.recharts-surface]:!outline-none">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
         data={buckets}
         margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
         barGap={0}
@@ -147,7 +132,7 @@ export function TimelineHistogram({
         />
         <Tooltip
           content={<CustomTooltip granularity={granularity} />}
-          cursor={{ fill: "#27272a", opacity: 0.5 }}
+          cursor={false}
         />
         <Bar
           dataKey="successCount"
@@ -155,40 +140,14 @@ export function TimelineHistogram({
           fill="#10b981"
           radius={[0, 0, 0, 0]}
           isAnimationActive={false}
-        >
-          {buckets.map((_, index) => (
-            <Cell
-              key={index}
-              fillOpacity={
-                brushIndices
-                  ? index >= brushIndices.start && index <= brushIndices.end
-                    ? 1
-                    : 0.3
-                  : 1
-              }
-            />
-          ))}
-        </Bar>
+        />
         <Bar
           dataKey="errorCount"
           stackId="requests"
           fill="#ef4444"
           radius={[2, 2, 0, 0]}
           isAnimationActive={false}
-        >
-          {buckets.map((_, index) => (
-            <Cell
-              key={index}
-              fillOpacity={
-                brushIndices
-                  ? index >= brushIndices.start && index <= brushIndices.end
-                    ? 1
-                    : 0.3
-                  : 1
-              }
-            />
-          ))}
-        </Bar>
+        />
         {isLive && (
           <ReferenceLine
             x={Date.now()}
@@ -197,7 +156,8 @@ export function TimelineHistogram({
             strokeDasharray="4 2"
           />
         )}
-      </BarChart>
-    </ResponsiveContainer>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
