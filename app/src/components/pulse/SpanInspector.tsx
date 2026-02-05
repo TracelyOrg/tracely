@@ -213,6 +213,12 @@ function RequestTab({ detail }: { detail: SpanDetail }) {
     return params;
   }, [detail.attributes]);
 
+  // Build full URL with query params
+  const fullUrl = useMemo(() => {
+    const queryString = buildQueryString(detail.attributes);
+    return `${detail.span_name}${queryString}`;
+  }, [detail.span_name, detail.attributes]);
+
   return (
     <div className="space-y-4 p-4">
       {/* Method + URL */}
@@ -220,8 +226,8 @@ function RequestTab({ detail }: { detail: SpanDetail }) {
         <span className="rounded bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600">
           {detail.http_method}
         </span>
-        <span className="font-mono text-sm break-all">{detail.http_route}</span>
-        <CopyValue text={`${detail.http_method} ${detail.http_route}`} />
+        <span className="font-mono text-sm break-all">{fullUrl}</span>
+        <CopyValue text={`${detail.http_method} ${fullUrl}`} />
       </div>
 
       {/* Query Parameters */}
@@ -432,6 +438,18 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "trace", label: "Trace" },
 ];
 
+/** Build query string from attributes with prefix "http.request.query." */
+function buildQueryString(attributes: Record<string, string>): string {
+  const params: string[] = [];
+  for (const [key, val] of Object.entries(attributes)) {
+    if (key.startsWith("http.request.query.")) {
+      const paramName = key.replace("http.request.query.", "");
+      params.push(`${encodeURIComponent(paramName)}=${encodeURIComponent(val)}`);
+    }
+  }
+  return params.length > 0 ? `?${params.join("&")}` : "";
+}
+
 export function SpanInspector({ detail, loading, error, onClose, orgSlug, projectSlug }: SpanInspectorProps) {
   const isError = detail
     ? detail.status_code === "ERROR" || detail.http_status_code >= 500
@@ -440,6 +458,13 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
   const [activeTab, setActiveTab] = useState<TabId>(
     isError ? "response" : "request"
   );
+
+  // Build full URL with query params for display
+  const fullUrl = useMemo(() => {
+    if (!detail) return "";
+    const queryString = buildQueryString(detail.attributes);
+    return `${detail.span_name}${queryString}`;
+  }, [detail]);
 
   // Fetch trace spans for the Trace Waterfall tab
   const {
@@ -474,8 +499,8 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
                 <span className="rounded bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600">
                   {detail.http_method}
                 </span>
-                <span className="truncate font-mono text-sm font-medium">
-                  {detail.span_name}
+                <span className="truncate font-mono text-sm font-medium" title={fullUrl}>
+                  {fullUrl}
                 </span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
