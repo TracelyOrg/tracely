@@ -8,6 +8,7 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import { formatBucketTimestamp, type TimeBucket } from "@/lib/timelineUtils";
 
@@ -68,29 +69,20 @@ export function TimelineHistogram({
   rangeEnd,
   isLive,
 }: TimelineHistogramProps) {
-  // Format ticks for X-axis based on display range (not bucket array)
-  // This ensures ticks slide smoothly with the domain
+  // Format ticks for X-axis (show ~5-7 ticks)
   const xAxisTicks = useMemo(() => {
-    const rangeMs = rangeEnd - rangeStart;
-    if (rangeMs <= 0) return [];
-
-    // Compute tick interval to get ~6 ticks
-    const tickCount = 6;
-    const rawInterval = rangeMs / tickCount;
-
-    // Round interval to nice values (align to granularity multiples)
-    const tickInterval = Math.ceil(rawInterval / granularity) * granularity;
-
-    // Align first tick to granularity boundary
-    const firstTick = Math.ceil(rangeStart / tickInterval) * tickInterval;
-
+    if (buckets.length === 0) return [];
+    const step = Math.max(1, Math.floor(buckets.length / 6));
     const ticks: number[] = [];
-    for (let t = firstTick; t <= rangeEnd; t += tickInterval) {
-      ticks.push(t);
+    for (let i = 0; i < buckets.length; i += step) {
+      ticks.push(buckets[i].timestamp);
     }
-
+    // Always include last tick
+    if (ticks[ticks.length - 1] !== buckets[buckets.length - 1].timestamp) {
+      ticks.push(buckets[buckets.length - 1].timestamp);
+    }
     return ticks;
-  }, [rangeStart, rangeEnd, granularity]);
+  }, [buckets]);
 
   if (buckets.length === 0) {
     return (
@@ -104,49 +96,57 @@ export function TimelineHistogram({
     <div className="h-full w-full [&_.recharts-wrapper]:!outline-none [&_.recharts-surface]:!outline-none">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart
-          data={buckets}
-          margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-          barGap={0}
-          barCategoryGap={1}
-        >
-          <XAxis
-            dataKey="timestamp"
-            type="number"
-            domain={[rangeStart, rangeEnd]}
-            ticks={xAxisTicks}
-            tickFormatter={(ts) => formatBucketTimestamp(ts, granularity)}
-            tick={{ fontSize: 10, fill: "#a1a1aa" }}
-            axisLine={{ stroke: "#3f3f46" }}
-            tickLine={{ stroke: "#3f3f46" }}
-            interval="preserveStartEnd"
+        data={buckets}
+        margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
+        barGap={0}
+        barCategoryGap={1}
+      >
+        <XAxis
+          dataKey="timestamp"
+          type="number"
+          domain={[rangeStart, rangeEnd]}
+          ticks={xAxisTicks}
+          tickFormatter={(ts) => formatBucketTimestamp(ts, granularity)}
+          tick={{ fontSize: 10, fill: "#a1a1aa" }}
+          axisLine={{ stroke: "#3f3f46" }}
+          tickLine={{ stroke: "#3f3f46" }}
+          interval="preserveStartEnd"
+        />
+        <YAxis
+          domain={[0, "auto"]}
+          tickFormatter={formatYAxis}
+          tick={{ fontSize: 10, fill: "#a1a1aa" }}
+          axisLine={{ stroke: "#3f3f46" }}
+          tickLine={{ stroke: "#3f3f46" }}
+          width={30}
+          allowDecimals={false}
+        />
+        <Tooltip
+          content={<CustomTooltip granularity={granularity} />}
+          cursor={false}
+        />
+        <Bar
+          dataKey="successCount"
+          stackId="requests"
+          fill="#10b981"
+          radius={[0, 0, 0, 0]}
+          isAnimationActive={false}
+        />
+        <Bar
+          dataKey="errorCount"
+          stackId="requests"
+          fill="#ef4444"
+          radius={[2, 2, 0, 0]}
+          isAnimationActive={false}
+        />
+        {isLive && (
+          <ReferenceLine
+            x={Date.now()}
+            stroke="#22c55e"
+            strokeWidth={2}
+            strokeDasharray="4 2"
           />
-          <YAxis
-            domain={[0, "auto"]}
-            tickFormatter={formatYAxis}
-            tick={{ fontSize: 10, fill: "#a1a1aa" }}
-            axisLine={{ stroke: "#3f3f46" }}
-            tickLine={{ stroke: "#3f3f46" }}
-            width={30}
-            allowDecimals={false}
-          />
-          <Tooltip
-            content={<CustomTooltip granularity={granularity} />}
-            cursor={false}
-          />
-          <Bar
-            dataKey="successCount"
-            stackId="requests"
-            fill="#10b981"
-            radius={[0, 0, 0, 0]}
-            isAnimationActive={false}
-          />
-          <Bar
-            dataKey="errorCount"
-            stackId="requests"
-            fill="#ef4444"
-            radius={[2, 2, 0, 0]}
-            isAnimationActive={false}
-          />
+        )}
         </BarChart>
       </ResponsiveContainer>
     </div>

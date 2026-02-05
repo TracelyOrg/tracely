@@ -43,9 +43,6 @@ export function getGranularity(rangeMs: number): number {
 /**
  * Compute time buckets from spans for histogram display.
  * Returns array of buckets sorted by timestamp ascending.
- *
- * IMPORTANT: Bucket timestamps are clock-aligned (e.g., 10:00:00, 10:00:05)
- * not relative to rangeStart. This prevents visual glitches when the range shifts.
  */
 export function computeBuckets(
   spans: SpanEvent[],
@@ -53,27 +50,16 @@ export function computeBuckets(
   rangeEnd: number,
   granularity: number
 ): TimeBucket[] {
-  // Align first bucket to clock time (floor to granularity boundary)
-  const alignedStart = Math.floor(rangeStart / granularity) * granularity;
-  // Extend end to include partial bucket
-  const alignedEnd = Math.ceil(rangeEnd / granularity) * granularity;
-
-  const bucketCount = Math.round((alignedEnd - alignedStart) / granularity);
+  // Initialize buckets for the entire range
+  const bucketCount = Math.ceil((rangeEnd - rangeStart) / granularity);
   const buckets: TimeBucket[] = [];
 
-  // Create buckets at clock-aligned timestamps
   for (let i = 0; i < bucketCount; i++) {
     buckets.push({
-      timestamp: alignedStart + i * granularity,
+      timestamp: rangeStart + i * granularity,
       successCount: 0,
       errorCount: 0,
     });
-  }
-
-  // Create a map for O(1) bucket lookup
-  const bucketMap = new Map<number, TimeBucket>();
-  for (const bucket of buckets) {
-    bucketMap.set(bucket.timestamp, bucket);
   }
 
   // Distribute spans into buckets
@@ -81,22 +67,21 @@ export function computeBuckets(
     const spanTime = new Date(span.start_time).getTime();
 
     // Skip spans outside the range
-    if (spanTime < alignedStart || spanTime >= alignedEnd) continue;
+    if (spanTime < rangeStart || spanTime >= rangeEnd) continue;
 
-    // Find the bucket for this span (clock-aligned)
-    const bucketTimestamp = Math.floor(spanTime / granularity) * granularity;
-    const bucket = bucketMap.get(bucketTimestamp);
-    if (!bucket) continue;
+    // Find the bucket index for this span
+    const bucketIndex = Math.floor((spanTime - rangeStart) / granularity);
+    if (bucketIndex < 0 || bucketIndex >= buckets.length) continue;
 
     // Categorize by status code
     const status = span.http_status_code;
     if (status >= 200 && status < 400) {
-      bucket.successCount++;
+      buckets[bucketIndex].successCount++;
     } else if (status >= 400) {
-      bucket.errorCount++;
+      buckets[bucketIndex].errorCount++;
     } else {
       // Unknown or pending — count as success for now
-      bucket.successCount++;
+      buckets[bucketIndex].successCount++;
     }
   }
 
