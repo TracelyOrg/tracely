@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
 import {
@@ -35,36 +35,91 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
     return result;
   }, [spans, childrenMap]);
 
-  // Compute time range bounds
-  const { rangeStart, rangeEnd, isLive } = useMemo(() => {
-    const now = Date.now();
+  // Determine if we're in live mode
+  const isLive = !(timeRange.preset === "custom" && timeRange.start && timeRange.end);
 
-    if (timeRange.preset === "custom" && timeRange.start && timeRange.end) {
+  // Compute range duration for live mode
+  const rangeMs = useMemo(() => {
+    if (!isLive) return 0;
+    return presetToRangeMs(timeRange.preset);
+  }, [isLive, timeRange.preset]);
+
+  // Compute granularity
+  const granularity = useMemo(() => {
+    if (!isLive) {
+      if (timeRange.start && timeRange.end) {
+        const customRangeMs = new Date(timeRange.end).getTime() - new Date(timeRange.start).getTime();
+        return getGranularity(customRangeMs);
+      }
+      return 5000;
+    }
+    return getGranularity(rangeMs);
+  }, [isLive, rangeMs, timeRange.start, timeRange.end]);
+
+  // Smooth "now" timestamp - updates every frame for smooth scrolling
+  const [now, setNow] = useState(() => Date.now());
+  const rafRef = useRef<number>(0);
+
+  // Update "now" every frame when in live mode
+  useEffect(() => {
+    if (!isLive) return;
+
+    const animate = () => {
+      setNow(Date.now());
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [isLive]);
+
+  // Compute time range bounds for display (smooth)
+  const { rangeStart, rangeEnd } = useMemo(() => {
+    if (!isLive && timeRange.start && timeRange.end) {
       return {
         rangeStart: new Date(timeRange.start).getTime(),
         rangeEnd: new Date(timeRange.end).getTime(),
-        isLive: false,
       };
     }
 
-    const rangeMs = presetToRangeMs(timeRange.preset);
     return {
       rangeStart: now - rangeMs,
       rangeEnd: now,
-      isLive: true,
     };
-  }, [timeRange]);
+  }, [isLive, timeRange.start, timeRange.end, now, rangeMs]);
 
-  // Compute granularity based on range
-  const granularity = useMemo(() => {
-    const rangeMs = rangeEnd - rangeStart;
-    return getGranularity(rangeMs);
-  }, [rangeStart, rangeEnd]);
+  // Aligned "now" for bucket computation - only changes at bucket boundaries
+  // This prevents bucket recalculation every frame
+  const alignedNow = useMemo(() => {
+    return Math.ceil(now / granularity) * granularity;
+  }, [Math.floor(now / granularity), granularity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Compute buckets
+  // Bucket computation range (wider than display for buffer)
+  const { bucketRangeStart, bucketRangeEnd } = useMemo(() => {
+    if (!isLive && timeRange.start && timeRange.end) {
+      return {
+        bucketRangeStart: new Date(timeRange.start).getTime(),
+        bucketRangeEnd: new Date(timeRange.end).getTime(),
+      };
+    }
+
+    // Add buffer of 5 buckets on each side
+    const buffer = granularity * 5;
+    return {
+      bucketRangeStart: alignedNow - rangeMs - buffer,
+      bucketRangeEnd: alignedNow + buffer,
+    };
+  }, [isLive, timeRange.start, timeRange.end, alignedNow, rangeMs, granularity]);
+
+  // Compute buckets (only recalculates when alignedNow changes, not every frame)
   const buckets = useMemo(() => {
-    return computeBuckets(allSpans, rangeStart, rangeEnd, granularity);
-  }, [allSpans, rangeStart, rangeEnd, granularity]);
+    return computeBuckets(allSpans, bucketRangeStart, bucketRangeEnd, granularity);
+  }, [allSpans, bucketRangeStart, bucketRangeEnd, granularity]);
 
   return {
     buckets,

@@ -236,7 +236,18 @@ const TIME_PRESETS: { key: TimeRangePreset; label: string }[] = [
   { key: "custom", label: "Custom" },
 ];
 
-// --- Live Header (40px, AC1 UX12, Story 11.2) ---
+// --- Health Metrics Helpers ---
+
+// Time window for real-time metrics calculation (30 seconds)
+const REALTIME_WINDOW_MS = 30_000;
+
+function formatMetricValue(value: number, decimals = 1): string {
+  if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  if (value >= 100) return Math.round(value).toString();
+  return value.toFixed(decimals);
+}
+
+// --- Live Header (40px, AC1 UX12, Story 11.2, Story 4.1 Health) ---
 
 function LiveHeader({
   status,
@@ -255,6 +266,54 @@ function LiveHeader({
 }) {
   const filters = useFilterStore((s) => s.filters);
   const [searchExpanded, setSearchExpanded] = useState(false);
+
+  // Real-time metrics from live span stream (instant reactivity)
+  const spans = useLiveStreamStore((s) => s.spans);
+  const childrenMap = useLiveStreamStore((s) => s.childrenMap);
+
+  // Compute real-time metrics from recent spans
+  const aggregatedMetrics = useMemo(() => {
+    const now = Date.now();
+    const cutoff = now - REALTIME_WINDOW_MS;
+
+    // Collect all completed spans from the time window
+    const allSpans = [
+      ...spans,
+      ...Object.values(childrenMap).flat(),
+    ].filter((s) => {
+      if (s.span_type === "pending_span") return false;
+      const spanTime = new Date(s.start_time).getTime();
+      return spanTime >= cutoff;
+    });
+
+    // Need at least a few spans to show metrics
+    if (allSpans.length < 1) return null;
+
+    // Calculate request rate (spans per minute based on window)
+    const windowMinutes = REALTIME_WINDOW_MS / 60_000;
+    const totalRequestRate = allSpans.length / windowMinutes;
+
+    // Calculate error rate
+    const errorCount = allSpans.filter((s) => s.http_status_code >= 400).length;
+    const avgErrorRate = (errorCount / allSpans.length) * 100;
+
+    // Calculate p95 latency
+    const durations = allSpans
+      .map((s) => s.duration_ms)
+      .filter((d) => d > 0)
+      .sort((a, b) => a - b);
+
+    let maxP95 = 0;
+    if (durations.length > 0) {
+      const p95Index = Math.floor(durations.length * 0.95);
+      maxP95 = durations[Math.min(p95Index, durations.length - 1)];
+    }
+
+    return { totalRequestRate, avgErrorRate, maxP95 };
+  }, [spans, childrenMap]);
+
+  // Metrics are always ready when we have spans (no loading state needed)
+  const healthLoading = false;
 
   return (
     <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
@@ -300,10 +359,7 @@ function LiveHeader({
         </div>
       )}
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Right side: Time preset select + Environment dropdown + Connection status + Count */}
+      {/* Time preset select (moved to left side) */}
       <div className="relative" data-testid="header-time-range">
         <select
           value={filters.timeRange.preset}
@@ -335,6 +391,41 @@ function LiveHeader({
             className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
             data-testid="header-custom-end"
           />
+        </div>
+      )}
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Metrics row (Story 4.1) */}
+      {aggregatedMetrics && !healthLoading && (
+        <div className="hidden lg:flex items-center gap-3 text-xs" data-testid="header-metrics">
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">req/min</span>
+            <span className="font-medium tabular-nums">{formatMetricValue(aggregatedMetrics.totalRequestRate)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">error</span>
+            <span className={cn(
+              "font-medium tabular-nums",
+              aggregatedMetrics.avgErrorRate >= 5 ? "text-red-500" :
+              aggregatedMetrics.avgErrorRate >= 1 ? "text-amber-500" : "text-emerald-500"
+            )}>
+              {aggregatedMetrics.avgErrorRate.toFixed(1)}%
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">p95</span>
+            <span className={cn(
+              "font-medium tabular-nums",
+              aggregatedMetrics.maxP95 >= 2000 ? "text-red-500" :
+              aggregatedMetrics.maxP95 >= 500 ? "text-amber-500" : "text-emerald-500"
+            )}>
+              {aggregatedMetrics.maxP95 >= 1000
+                ? `${(aggregatedMetrics.maxP95 / 1000).toFixed(1)}s`
+                : `${Math.round(aggregatedMetrics.maxP95)}ms`}
+            </span>
+          </div>
         </div>
       )}
 

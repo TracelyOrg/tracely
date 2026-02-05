@@ -11,7 +11,8 @@ from pydantic import ValidationError
 
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
-from app.routers import api_keys, auth, health, ingest, invitations, members, organizations, projects, spans, stream
+from app.db.redis import close_redis, init_redis
+from app.routers import api_keys, auth, dashboard, health, ingest, invitations, members, organizations, projects, spans, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
     BadRequestError,
@@ -28,7 +29,9 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_clickhouse()
+    await init_redis()
     yield
+    await close_redis()
     await close_clickhouse()
 
 
@@ -53,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(invitations.router)
     app.include_router(members.router)
+    app.include_router(dashboard.router)
 
     @app.exception_handler(BadRequestError)
     async def bad_request_handler(request: Request, exc: BadRequestError) -> JSONResponse:
