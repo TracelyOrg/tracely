@@ -435,8 +435,8 @@ function ResponseTab({ detail }: { detail: SpanDetail }) {
 // --- Main Inspector Component ---
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: "request", label: "Request" },
   { id: "response", label: "Response" },
+  { id: "request", label: "Request" },
   { id: "trace", label: "Trace" },
 ];
 
@@ -465,9 +465,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
     ? detail.status_code === "ERROR" || detail.http_status_code >= 500
     : false;
 
-  const [activeTab, setActiveTab] = useState<TabId>(
-    isError ? "response" : "request"
-  );
+  const [activeTab, setActiveTab] = useState<TabId>("response");
 
   // Build full URL with query params for display (strip method prefix if present in span_name)
   const fullUrl = useMemo(() => {
