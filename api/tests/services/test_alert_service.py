@@ -411,3 +411,277 @@ async def test_reset_restores_default_values():
     assert existing_rule.threshold_value == 5.0
     assert existing_rule.duration_seconds == 300
     assert existing_rule.is_custom is False
+
+
+# ─── Story 5.5: create_alert_event tests (Task 10.5) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_alert_event_stores_rule_snapshot():
+    """Create alert event stores rule snapshot for audit trail (AC2, Task 10.5)."""
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    rule = AlertRule(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        project_id=project_id,
+        preset_key="high_error_rate",
+        name="High Error Rate",
+        category="availability",
+        description="Fires when error rate exceeds threshold",
+        threshold_value=7.5,  # Custom value
+        duration_seconds=300,
+        comparison_operator="gt",
+        is_active=True,
+        is_custom=True,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    # Capture the event that gets added
+    added_event = None
+
+    def capture_add(event):
+        nonlocal added_event
+        added_event = event
+
+    mock_db.add.side_effect = capture_add
+
+    await alert_service.create_alert_event(mock_db, rule, metric_value=10.5)
+
+    # Verify event was created with rule snapshot
+    assert added_event is not None
+    assert added_event.rule_snapshot is not None
+    snapshot = added_event.rule_snapshot
+    assert snapshot["preset_key"] == "high_error_rate"
+    assert snapshot["threshold_value"] == 7.5
+    assert snapshot["is_custom"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_alert_event_captures_metric_value():
+    """Create alert event captures the triggering metric value (AC2, Task 10.5)."""
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    rule = AlertRule(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        project_id=project_id,
+        preset_key="slow_responses",
+        name="Slow Responses",
+        category="performance",
+        description="Fires when p95 latency exceeds threshold",
+        threshold_value=2000,
+        duration_seconds=300,
+        comparison_operator="gt",
+        is_active=True,
+        is_custom=False,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_db = AsyncMock()
+    added_event = None
+
+    def capture_add(event):
+        nonlocal added_event
+        added_event = event
+
+    mock_db.add = MagicMock(side_effect=capture_add)
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    await alert_service.create_alert_event(mock_db, rule, metric_value=3500)
+
+    assert added_event is not None
+    assert added_event.metric_value == 3500
+    assert added_event.threshold_value == 2000
+    assert added_event.status == "active"
+
+
+# ─── Story 5.5: bulk_toggle_alerts tests (Task 10.3) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_bulk_toggle_activates_multiple_presets():
+    """Bulk toggle activates multiple preset alerts (AC3)."""
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    mock_db = AsyncMock()
+
+    # First call: check for existing rules (return empty for all)
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+    mock_db.add = MagicMock()
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    added_rules = []
+
+    def capture_add(rule):
+        rule.id = uuid.uuid4()
+        added_rules.append(rule)
+
+    mock_db.add.side_effect = capture_add
+
+    result = await alert_service.bulk_toggle_alerts(
+        mock_db, org_id, project_id,
+        preset_keys=["high_error_rate", "slow_responses"],
+        is_active=True
+    )
+
+    # Should create 2 new rules
+    assert len(added_rules) == 2
+    assert all(r.is_active for r in added_rules)
+
+
+@pytest.mark.asyncio
+async def test_bulk_toggle_deactivates_existing_rules():
+    """Bulk toggle deactivates existing rules (AC3)."""
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    existing_rule = AlertRule(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        project_id=project_id,
+        preset_key="high_error_rate",
+        name="High Error Rate",
+        category="availability",
+        description="Test",
+        threshold_value=5.0,
+        duration_seconds=300,
+        comparison_operator="gt",
+        is_active=True,  # Currently active
+        is_custom=False,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = existing_rule
+    mock_db.execute.return_value = mock_result
+    mock_db.commit = AsyncMock()
+    mock_db.refresh = AsyncMock()
+
+    result = await alert_service.bulk_toggle_alerts(
+        mock_db, org_id, project_id,
+        preset_keys=["high_error_rate"],
+        is_active=False
+    )
+
+    # Existing rule should be deactivated
+    assert existing_rule.is_active is False
+
+
+# ─── Story 5.5: delete_custom_alert tests (Task 10.4) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_custom_alert_removes_rule_and_events():
+    """Delete custom alert removes both the rule and associated events (AC3)."""
+    from app.models.alert_event import AlertEvent
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    existing_rule = AlertRule(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        project_id=project_id,
+        preset_key="custom_rule",
+        name="Custom Rule",
+        category="availability",
+        description="Test",
+        threshold_value=5.0,
+        duration_seconds=300,
+        comparison_operator="gt",
+        is_active=True,
+        is_custom=True,  # Must be custom to delete
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = existing_rule
+    mock_db.execute.return_value = mock_result
+    mock_db.delete = AsyncMock()
+    mock_db.commit = AsyncMock()
+
+    await alert_service.delete_custom_alert(
+        mock_db, org_id, project_id, "custom_rule"
+    )
+
+    # Should delete both events and rule
+    # execute called twice: first for finding rule, second for deleting events
+    assert mock_db.execute.call_count >= 2
+    mock_db.delete.assert_called_once_with(existing_rule)
+    mock_db.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_preset_alert_raises_forbidden():
+    """Delete preset (non-custom) alert raises ForbiddenError (AC3)."""
+    from app.utils.exceptions import ForbiddenError
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    preset_rule = AlertRule(
+        id=uuid.uuid4(),
+        org_id=org_id,
+        project_id=project_id,
+        preset_key="high_error_rate",
+        name="High Error Rate",
+        category="availability",
+        description="Test",
+        threshold_value=5.0,
+        duration_seconds=300,
+        comparison_operator="gt",
+        is_active=True,
+        is_custom=False,  # Preset, not custom
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = preset_rule
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(ForbiddenError) as exc_info:
+        await alert_service.delete_custom_alert(
+            mock_db, org_id, project_id, "high_error_rate"
+        )
+
+    assert "custom" in str(exc_info.value).lower()
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_alert_raises_not_found():
+    """Delete nonexistent alert raises NotFoundError (AC3)."""
+    from app.utils.exceptions import NotFoundError
+
+    org_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+
+    with pytest.raises(NotFoundError):
+        await alert_service.delete_custom_alert(
+            mock_db, org_id, project_id, "nonexistent"
+        )

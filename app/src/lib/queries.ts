@@ -25,4 +25,12 @@ export const queryKeys = {
   // Alert templates for project
   alertTemplates: (projectId: string) =>
     ["alerts", "templates", projectId] as const,
+
+  // Alert history for project
+  alertHistory: (projectId: string) =>
+    ["alerts", "history", projectId] as const,
+
+  // Single alert event detail
+  alertEvent: (projectId: string, eventId: string) =>
+    ["alerts", "event", projectId, eventId] as const,
 };

@@ -50,6 +50,41 @@ export interface AlertTemplatesResponse {
   templates: AlertTemplate[];
 }
 
+export type AlertEventStatus = "active" | "resolved" | "acknowledged";
+
+export interface AlertEvent {
+  id: string;
+  rule_id: string;
+  org_id: string;
+  project_id: string;
+  triggered_at: string;
+  resolved_at: string | null;
+  metric_value: number;
+  threshold_value: number;
+  status: AlertEventStatus;
+  notification_sent: boolean;
+  rule_snapshot?: AlertRule | null;
+  // Joined from alert_rules
+  rule_name: string;
+  rule_category: AlertCategory;
+  rule_preset_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlertHistoryResponse {
+  events: AlertEvent[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface AlertHistoryFilters {
+  status?: AlertEventStatus;
+  start_date?: string;
+  end_date?: string;
+}
+
 export const CATEGORY_CONFIG: Record<AlertCategory, { label: string; color: string; icon: string }> = {
   availability: { label: "Availability", color: "red", icon: "Shield" },
   performance: { label: "Performance", color: "amber", icon: "Gauge" },

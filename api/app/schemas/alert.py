@@ -73,3 +73,51 @@ class AlertRuleUpdate(BaseModel):
 class AlertToggleRequest(BaseModel):
     """Schema for toggling an alert on/off."""
     preset_key: str = Field(..., min_length=1, max_length=50)
+
+
+# Alert Event (History) schemas
+AlertEventStatus = Literal["active", "resolved", "acknowledged"]
+
+
+class AlertEventOut(BaseModel):
+    """Response schema for an alert event from the database."""
+    id: uuid.UUID
+    rule_id: uuid.UUID
+    org_id: uuid.UUID
+    project_id: uuid.UUID
+    triggered_at: datetime
+    resolved_at: datetime | None
+    metric_value: float
+    threshold_value: float
+    status: AlertEventStatus
+    notification_sent: bool
+    rule_snapshot: dict | None = None
+    # Joined from alert_rules
+    rule_name: str
+    rule_category: AlertCategory
+    rule_preset_key: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class AlertHistoryResponse(BaseModel):
+    """Response schema for the alert history endpoint."""
+    events: list[AlertEventOut]
+    total: int
+    offset: int
+    limit: int
+
+
+class AlertHistoryFilters(BaseModel):
+    """Query parameters for filtering alert history."""
+    status: AlertEventStatus | None = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+
+
+class BulkToggleRequest(BaseModel):
+    """Schema for bulk toggling alerts on/off."""
+    preset_keys: list[str] = Field(..., min_length=1)
+    is_active: bool

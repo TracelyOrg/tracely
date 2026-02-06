@@ -3,7 +3,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, Gauge, TrendingUp, Bell, X, RotateCcw, Mail, MessageSquare, Check, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { Shield, Gauge, TrendingUp, Bell, X, RotateCcw, Mail, MessageSquare, Check, ExternalLink, ChevronDown, ChevronUp, Square, CheckSquare, Trash2 } from "lucide-react";
+import AlertTabs from "@/components/alerts/AlertTabs";
+import BulkActionBar from "@/components/alerts/BulkActionBar";
+import DeleteAlertDialog from "@/components/alerts/DeleteAlertDialog";
 import { apiFetch, ApiError } from "@/lib/api";
 import { addToast } from "@/hooks/useToast";
 import type { DataEnvelope } from "@/types/api";
@@ -440,16 +443,21 @@ function AlertTemplateCard({
   orgSlug,
   projectSlug,
   onEdit,
+  isSelected,
+  onToggleSelect,
 }: {
   template: AlertTemplate;
   orgSlug: string;
   projectSlug: string;
   onEdit: () => void;
+  isSelected: boolean;
+  onToggleSelect: () => void;
 }) {
   const queryClient = useQueryClient();
   const [isToggling, setIsToggling] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Check if template has custom values
+  // Check if template has custom values (deletable alerts)
   const hasCustomValues = template.custom_threshold !== null || template.custom_duration !== null;
 
   // Toggle mutation
@@ -501,10 +509,28 @@ function AlertTemplateCard({
   const displayActive = isToggling ? !template.is_active : template.is_active;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-3 hover:border-border/80 transition-colors">
-      {/* Header with name, custom badge, and status */}
+    <div className={`rounded-lg border bg-card p-4 space-y-3 hover:border-border/80 transition-colors ${
+      isSelected ? "border-primary ring-1 ring-primary" : "border-border"
+    }`}>
+      {/* Header with checkbox, name, custom badge, and status */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {/* Checkbox for selection */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSelect();
+            }}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={isSelected ? "Deselect alert" : "Select alert"}
+          >
+            {isSelected ? (
+              <CheckSquare className="size-5 text-primary" />
+            ) : (
+              <Square className="size-5" />
+            )}
+          </button>
           <h3 className="font-medium text-foreground">{template.name}</h3>
           {hasCustomValues && (
             <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -555,14 +581,39 @@ function AlertTemplateCard({
             }`}
           />
         </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Edit
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onEdit}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Edit
+          </button>
+          {/* Delete button - only for custom alerts */}
+          {hasCustomValues && (
+            <button
+              type="button"
+              onClick={() => setShowDeleteDialog(true)}
+              className="text-xs text-red-500 hover:text-red-600 transition-colors flex items-center gap-1"
+              aria-label="Delete alert"
+            >
+              <Trash2 className="size-3" />
+              Delete
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      {showDeleteDialog && (
+        <DeleteAlertDialog
+          alertName={template.name}
+          presetKey={template.key}
+          orgSlug={orgSlug}
+          projectSlug={projectSlug}
+          onClose={() => setShowDeleteDialog(false)}
+        />
+      )}
     </div>
   );
 }
@@ -575,6 +626,8 @@ function AlertCategorySection({
   orgSlug,
   projectSlug,
   onEditTemplate,
+  selectedKeys,
+  onToggleSelect,
 }: {
   category: AlertCategory;
   templates: AlertTemplate[];
@@ -582,6 +635,8 @@ function AlertCategorySection({
   orgSlug: string;
   projectSlug: string;
   onEditTemplate: (template: AlertTemplate) => void;
+  selectedKeys: string[];
+  onToggleSelect: (key: string) => void;
 }) {
   const config = CATEGORY_CONFIG[category];
   const { Icon, label, colorClass } = config;
@@ -610,6 +665,8 @@ function AlertCategorySection({
               orgSlug={orgSlug}
               projectSlug={projectSlug}
               onEdit={() => onEditTemplate(template)}
+              isSelected={selectedKeys.includes(template.key)}
+              onToggleSelect={() => onToggleSelect(template.key)}
             />
           ))
         )}
@@ -848,6 +905,19 @@ export default function AlertsPageClient() {
   const [editingTemplate, setEditingTemplate] = useState<AlertTemplate | null>(null);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+
+  // Toggle selection for a single alert
+  const handleToggleSelect = useCallback((key: string) => {
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }, []);
+
+  // Clear all selections
+  const handleClearSelection = useCallback(() => {
+    setSelectedKeys([]);
+  }, []);
 
   // Load org and project IDs for notification channels
   useEffect(() => {
@@ -896,13 +966,16 @@ export default function AlertsPageClient() {
 
   return (
     <div className="p-4 space-y-8">
-      {/* Page header */}
+      {/* Page header with tabs */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Alerts</h1>
-        <p className="text-sm text-muted-foreground">
-          Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">G</kbd> then{" "}
-          <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">A</kbd> to navigate here
-        </p>
+        <div className="space-y-1">
+          <h1 className="text-xl font-semibold text-foreground">Alerts</h1>
+          <p className="text-sm text-muted-foreground">
+            Press <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">G</kbd> then{" "}
+            <kbd className="px-1.5 py-0.5 text-xs bg-muted rounded border">A</kbd> to navigate here
+          </p>
+        </div>
+        <AlertTabs orgSlug={orgSlug} projectSlug={projectSlug} />
       </div>
 
       {/* Empty state when no active alerts */}
@@ -918,6 +991,8 @@ export default function AlertsPageClient() {
           orgSlug={orgSlug}
           projectSlug={projectSlug}
           onEditTemplate={setEditingTemplate}
+          selectedKeys={selectedKeys}
+          onToggleSelect={handleToggleSelect}
         />
       ))}
 
@@ -942,6 +1017,14 @@ export default function AlertsPageClient() {
           onClose={() => setEditingTemplate(null)}
         />
       )}
+
+      {/* Bulk Action Bar */}
+      <BulkActionBar
+        selectedKeys={selectedKeys}
+        orgSlug={orgSlug}
+        projectSlug={projectSlug}
+        onClearSelection={handleClearSelection}
+      />
     </div>
   );
 }

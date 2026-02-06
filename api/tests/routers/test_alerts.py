@@ -595,3 +595,321 @@ def test_reset_alert_to_defaults(
     body = response.json()
     assert body["data"]["threshold_value"] == 5.0
     assert body["data"]["is_custom"] is False
+
+
+# ─── GET /api/orgs/{org_slug}/projects/{slug}/alerts/history (Story 5.5) ────────
+
+
+def test_history_endpoint_returns_paginated_events(
+    client, mock_user, sample_org, sample_project, member
+):
+    """History endpoint returns paginated alert events (AC1, Task 10.1)."""
+    from app.main import app
+    from app.schemas.alert import AlertEventOut
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    mock_events = [
+        AlertEventOut(
+            id=uuid.uuid4(),
+            rule_id=uuid.uuid4(),
+            org_id=sample_org.id,
+            project_id=sample_project.id,
+            triggered_at=datetime.now(timezone.utc),
+            resolved_at=None,
+            metric_value=10.5,
+            threshold_value=5.0,
+            status="active",
+            notification_sent=True,
+            rule_snapshot=None,
+            rule_name="High Error Rate",
+            rule_category="availability",
+            rule_preset_key="high_error_rate",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+    ]
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.get_alert_history = AsyncMock(return_value=(mock_events, 1))
+
+        response = client.get(
+            "/api/orgs/acme-corp/projects/my-api/alerts/history?offset=0&limit=20"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert "events" in body["data"]
+    assert "total" in body["data"]
+    assert body["data"]["total"] == 1
+    assert body["data"]["offset"] == 0
+    assert body["data"]["limit"] == 20
+
+
+def test_history_endpoint_filters_by_status(
+    client, mock_user, sample_org, sample_project, member
+):
+    """History endpoint filters by status (AC1, Task 10.2)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.get_alert_history = AsyncMock(return_value=([], 0))
+
+        response = client.get(
+            "/api/orgs/acme-corp/projects/my-api/alerts/history?status=active"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    # Verify service was called with status filter
+    mock_alert_svc.get_alert_history.assert_called_once()
+    call_kwargs = mock_alert_svc.get_alert_history.call_args[1]
+    assert call_kwargs.get("status") == "active"
+
+
+def test_history_endpoint_filters_by_date_range(
+    client, mock_user, sample_org, sample_project, member
+):
+    """History endpoint filters by date range (AC1, Task 10.2)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    start_date = "2025-01-01T00:00:00Z"
+    end_date = "2025-01-31T23:59:59Z"
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.get_alert_history = AsyncMock(return_value=([], 0))
+
+        response = client.get(
+            f"/api/orgs/acme-corp/projects/my-api/alerts/history?start_date={start_date}&end_date={end_date}"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    # Verify service was called with date filters
+    mock_alert_svc.get_alert_history.assert_called_once()
+    call_kwargs = mock_alert_svc.get_alert_history.call_args[1]
+    assert call_kwargs.get("start_date") is not None
+    assert call_kwargs.get("end_date") is not None
+
+
+# ─── POST /api/orgs/{org_slug}/projects/{slug}/alerts/bulk-toggle (Story 5.5) ────────
+
+
+def test_bulk_toggle_activates_multiple_alerts(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Bulk toggle endpoint activates multiple alerts (AC3, Task 10.3)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    mock_rules = [
+        AlertRule(
+            id=uuid.uuid4(),
+            org_id=sample_org.id,
+            project_id=sample_project.id,
+            preset_key="high_error_rate",
+            name="High Error Rate",
+            category="availability",
+            description="Test",
+            threshold_value=5.0,
+            duration_seconds=300,
+            comparison_operator="gt",
+            is_active=True,
+            is_custom=False,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+        AlertRule(
+            id=uuid.uuid4(),
+            org_id=sample_org.id,
+            project_id=sample_project.id,
+            preset_key="slow_responses",
+            name="Slow Responses",
+            category="performance",
+            description="Test",
+            threshold_value=2000,
+            duration_seconds=300,
+            comparison_operator="gt",
+            is_active=True,
+            is_custom=False,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+    ]
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.bulk_toggle_alerts = AsyncMock(return_value=mock_rules)
+
+        response = client.post(
+            "/api/orgs/acme-corp/projects/my-api/alerts/bulk-toggle",
+            json={
+                "preset_keys": ["high_error_rate", "slow_responses"],
+                "is_active": True,
+            },
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "data" in body
+    assert body["data"]["count"] == 2
+    assert len(body["data"]["rules"]) == 2
+
+
+def test_bulk_toggle_deactivates_multiple_alerts(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Bulk toggle endpoint deactivates multiple alerts (AC3, Task 10.3)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    mock_rules = [
+        AlertRule(
+            id=uuid.uuid4(),
+            org_id=sample_org.id,
+            project_id=sample_project.id,
+            preset_key="high_error_rate",
+            name="High Error Rate",
+            category="availability",
+            description="Test",
+            threshold_value=5.0,
+            duration_seconds=300,
+            comparison_operator="gt",
+            is_active=False,
+            is_custom=False,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        ),
+    ]
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.bulk_toggle_alerts = AsyncMock(return_value=mock_rules)
+
+        response = client.post(
+            "/api/orgs/acme-corp/projects/my-api/alerts/bulk-toggle",
+            json={
+                "preset_keys": ["high_error_rate"],
+                "is_active": False,
+            },
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["rules"][0]["is_active"] is False
+
+
+# ─── DELETE /api/orgs/{org_slug}/projects/{slug}/alerts/rules/{preset_key} (Story 5.5) ────────
+
+
+def test_delete_custom_alert_succeeds(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Delete custom alert endpoint succeeds for custom alerts (AC3, Task 10.4)."""
+    from app.main import app
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.delete_custom_alert = AsyncMock(return_value=None)
+
+        response = client.delete(
+            "/api/orgs/acme-corp/projects/my-api/alerts/rules/custom_alert_key"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["deleted"] == "custom_alert_key"
+
+
+def test_delete_preset_alert_forbidden(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Delete preset alert endpoint returns 403 for non-custom alerts (AC3, Task 10.4)."""
+    from app.main import app
+    from app.utils.exceptions import ForbiddenError
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.delete_custom_alert = AsyncMock(
+            side_effect=ForbiddenError("Only custom alerts can be deleted")
+        )
+
+        response = client.delete(
+            "/api/orgs/acme-corp/projects/my-api/alerts/rules/high_error_rate"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 403
+
+
+def test_delete_nonexistent_alert_not_found(
+    client, mock_user, sample_org, sample_project, member
+):
+    """Delete nonexistent alert returns 404 (AC3, Task 10.4)."""
+    from app.main import app
+    from app.utils.exceptions import NotFoundError
+
+    _override_full(app, mock_user, sample_org, member, sample_project)
+
+    with (
+        patch("app.routers.alerts.project_service") as mock_project_svc,
+        patch("app.routers.alerts.alert_service") as mock_alert_svc,
+    ):
+        mock_project_svc.get_project_by_slug = AsyncMock(return_value=sample_project)
+        mock_alert_svc.delete_custom_alert = AsyncMock(
+            side_effect=NotFoundError("Alert rule not found")
+        )
+
+        response = client.delete(
+            "/api/orgs/acme-corp/projects/my-api/alerts/rules/nonexistent"
+        )
+
+    _clear(app)
+
+    assert response.status_code == 404
