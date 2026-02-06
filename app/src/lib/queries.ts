@@ -21,4 +21,8 @@ export const queryKeys = {
   // Single span detail (future use)
   span: (projectId: string, spanId: string) =>
     ["span", projectId, spanId] as const,
+
+  // Alert templates for project
+  alertTemplates: (projectId: string) =>
+    ["alerts", "templates", projectId] as const,
 };

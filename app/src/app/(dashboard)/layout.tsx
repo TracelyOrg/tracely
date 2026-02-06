@@ -109,6 +109,16 @@ export default function DashboardLayout({
     }, [currentOrgSlug, currentProjectSlug, router])
   );
 
+  // G→A navigates to Alerts when org/project context is available (Story 5.1, AC1)
+  useKeyboardShortcut(
+    ["g", "a"],
+    useCallback(() => {
+      if (currentOrgSlug && currentProjectSlug) {
+        router.push(`/${currentOrgSlug}/${currentProjectSlug}/alerts`);
+      }
+    }, [currentOrgSlug, currentProjectSlug, router])
+  );
+
   useEffect(() => {
     let cancelled = false;
 

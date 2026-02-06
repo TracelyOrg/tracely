@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
 from app.db.redis import close_redis, init_redis
-from app.routers import api_keys, auth, dashboard, health, ingest, invitations, members, organizations, projects, spans, stream
+from app.routers import alerts, api_keys, auth, dashboard, health, ingest, invitations, members, organizations, projects, spans, stream
 from app.utils.envelope import error
 from app.utils.exceptions import (
     BadRequestError,
@@ -57,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(invitations.router)
     app.include_router(members.router)
     app.include_router(dashboard.router)
+    app.include_router(alerts.router)
 
     @app.exception_handler(BadRequestError)
     async def bad_request_handler(request: Request, exc: BadRequestError) -> JSONResponse:
