@@ -199,6 +199,7 @@ export default function ProjectSettingsClient() {
         )}
       </section>
 
+
       {/* Generate Key Dialog */}
       <Dialog open={showGenerate} onOpenChange={setShowGenerate}>
         <DialogContent>

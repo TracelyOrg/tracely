@@ -12,7 +12,8 @@ from pydantic import ValidationError
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
 from app.db.redis import close_redis, init_redis
-from app.routers import alerts, api_keys, auth, dashboard, health, ingest, invitations, members, organizations, projects, spans, stream
+from app.routers import alerts, api_keys, auth, dashboard, health, ingest, invitations, members, notifications, organizations, projects, spans, stream
+from app.services.alert_scheduler import start_scheduler, stop_scheduler
 from app.utils.envelope import error
 from app.utils.exceptions import (
     BadRequestError,
@@ -30,7 +31,9 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await init_clickhouse()
     await init_redis()
+    start_scheduler()
     yield
+    await stop_scheduler()
     await close_redis()
     await close_clickhouse()
 
@@ -58,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(members.router)
     app.include_router(dashboard.router)
     app.include_router(alerts.router)
+    app.include_router(notifications.router)
 
     @app.exception_handler(BadRequestError)
     async def bad_request_handler(request: Request, exc: BadRequestError) -> JSONResponse:

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, Gauge, TrendingUp, Bell, X, RotateCcw } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { Shield, Gauge, TrendingUp, Bell, X, RotateCcw, Mail, MessageSquare, Check, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { apiFetch, ApiError } from "@/lib/api";
 import { addToast } from "@/hooks/useToast";
 import type { DataEnvelope } from "@/types/api";
 import type { AlertTemplate, AlertCategory, AlertRule, AlertRuleUpdate } from "@/types/alert";
+import type { NotificationChannel, NotificationTestResponse } from "@/types/notification";
 import { queryKeys } from "@/lib/queries";
 
 // Category configuration with icons and colors
@@ -255,6 +256,184 @@ function AlertEditModal({
   );
 }
 
+// Webhook Config Modal
+function WebhookConfigModal({
+  type,
+  channel,
+  orgId,
+  projectId,
+  onClose,
+  onSaved,
+}: {
+  type: "slack" | "discord";
+  channel?: NotificationChannel;
+  orgId: string;
+  projectId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [webhookUrl, setWebhookUrl] = useState(
+    (channel?.config?.webhook_url as string) || ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const basePath = `/api/orgs/${orgId}/projects/${projectId}/notifications`;
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const config = { webhook_url: webhookUrl };
+
+      if (channel) {
+        await apiFetch(`${basePath}/${channel.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ config }),
+        });
+      } else {
+        await apiFetch(basePath, {
+          method: "POST",
+          body: JSON.stringify({
+            channel_type: type,
+            config,
+            is_enabled: true,
+          }),
+        });
+      }
+
+      addToast(`${type === "slack" ? "Slack" : "Discord"} webhook saved`, "success");
+      onSaved();
+      onClose();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        addToast(err.message, "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!channel) {
+      addToast("Save the webhook first before testing", "error");
+      return;
+    }
+
+    setTesting(true);
+    try {
+      const res = await apiFetch<DataEnvelope<NotificationTestResponse>>(
+        `${basePath}/${channel.id}/test`,
+        { method: "POST" }
+      );
+
+      if (res.data.success) {
+        addToast("Test notification sent successfully!", "success");
+      } else {
+        addToast(res.data.error || "Test failed", "error");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        addToast(err.message, "error");
+      }
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-card border border-border rounded-lg shadow-lg w-full max-w-md mx-4 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground">
+            Configure {type === "slack" ? "Slack" : "Discord"} Webhook
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          {type === "slack" ? (
+            <>
+              Create an incoming webhook in Slack and paste the URL below.{" "}
+              <a
+                href="https://api.slack.com/messaging/webhooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Learn more <ExternalLink className="size-3" />
+              </a>
+            </>
+          ) : (
+            <>
+              Create a webhook in your Discord server settings.{" "}
+              <a
+                href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                Learn more <ExternalLink className="size-3" />
+              </a>
+            </>
+          )}
+        </p>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-foreground mb-2">
+            Webhook URL
+          </label>
+          <input
+            type="url"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+            placeholder={
+              type === "slack"
+                ? "https://hooks.slack.com/services/..."
+                : "https://discord.com/api/webhooks/..."
+            }
+            className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            {channel && (
+              <button
+                onClick={handleTest}
+                disabled={testing || !webhookUrl}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                {testing ? "Testing..." : "Send Test"}
+              </button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !webhookUrl}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Alert template card component
 function AlertTemplateCard({
   template,
@@ -439,6 +618,211 @@ function AlertCategorySection({
   );
 }
 
+// Notification Channels Section
+function NotificationChannelsSection({
+  orgId,
+  projectId,
+}: {
+  orgId: string | null;
+  projectId: string | null;
+}) {
+  const [channels, setChannels] = useState<NotificationChannel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [configModal, setConfigModal] = useState<{
+    type: "slack" | "discord";
+    channel?: NotificationChannel;
+  } | null>(null);
+
+  const basePath = orgId && projectId
+    ? `/api/orgs/${orgId}/projects/${projectId}/notifications`
+    : null;
+
+  const loadChannels = useCallback(async () => {
+    if (!basePath) return;
+    try {
+      const res = await apiFetch<DataEnvelope<NotificationChannel[]>>(basePath);
+      setChannels(res.data);
+    } catch {
+      // Silently fail - channels are optional
+    } finally {
+      setLoading(false);
+    }
+  }, [basePath]);
+
+  useEffect(() => {
+    if (basePath) {
+      loadChannels();
+    }
+  }, [basePath, loadChannels]);
+
+  const getChannel = (type: string) => channels.find((c) => c.channel_type === type);
+
+  async function handleToggleChannel(channel: NotificationChannel) {
+    if (!basePath) return;
+    try {
+      await apiFetch(`${basePath}/${channel.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_enabled: !channel.is_enabled }),
+      });
+      await loadChannels();
+      addToast(channel.is_enabled ? "Channel disabled" : "Channel enabled", "success");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        addToast(err.message, "error");
+      }
+    }
+  }
+
+  const slackChannel = getChannel("slack");
+  const discordChannel = getChannel("discord");
+
+  // Count configured channels
+  const configuredCount = [slackChannel, discordChannel].filter(Boolean).length;
+
+  if (!orgId || !projectId) return null;
+
+  return (
+    <section className="space-y-4">
+      {/* Section header - clickable to expand */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between group"
+      >
+        <div className="flex items-center gap-2">
+          <Bell className="size-5 text-purple-500" />
+          <h2 className="text-lg font-semibold text-foreground">Notification Channels</h2>
+          <span className="text-sm text-muted-foreground">
+            ({configuredCount} configured)
+          </span>
+        </div>
+        {expanded ? (
+          <ChevronUp className="size-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+        ) : (
+          <ChevronDown className="size-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+        )}
+      </button>
+
+      {/* Expanded content */}
+      {expanded && (
+        <div className="space-y-4">
+          {loading ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-lg border border-border p-4 animate-pulse">
+                  <div className="h-5 w-24 bg-muted rounded mb-2" />
+                  <div className="h-4 w-full bg-muted rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {/* Email - Always On */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="rounded-lg bg-blue-500/10 p-2">
+                    <Mail className="size-4 text-blue-500" />
+                  </div>
+                  <h3 className="font-medium text-foreground">Email</h3>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Sent to all organization admins
+                </p>
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                  <Check className="size-3" />
+                  Always On
+                </span>
+              </div>
+
+              {/* Slack */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-purple-500/10 p-2">
+                      <MessageSquare className="size-4 text-purple-500" />
+                    </div>
+                    <h3 className="font-medium text-foreground">Slack</h3>
+                  </div>
+                  {slackChannel && (
+                    <button
+                      onClick={() => handleToggleChannel(slackChannel)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
+                        slackChannel.is_enabled ? "bg-primary" : "bg-muted"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                          slackChannel.is_enabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {slackChannel ? "Webhook configured" : "Post alerts to Slack"}
+                </p>
+                <button
+                  onClick={() => setConfigModal({ type: "slack", channel: slackChannel })}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {slackChannel ? "Configure" : "Set Up"}
+                </button>
+              </div>
+
+              {/* Discord */}
+              <div className="rounded-lg border border-border bg-card p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-indigo-500/10 p-2">
+                      <MessageSquare className="size-4 text-indigo-500" />
+                    </div>
+                    <h3 className="font-medium text-foreground">Discord</h3>
+                  </div>
+                  {discordChannel && (
+                    <button
+                      onClick={() => handleToggleChannel(discordChannel)}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
+                        discordChannel.is_enabled ? "bg-primary" : "bg-muted"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none block size-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+                          discordChannel.is_enabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  {discordChannel ? "Webhook configured" : "Post alerts to Discord"}
+                </p>
+                <button
+                  onClick={() => setConfigModal({ type: "discord", channel: discordChannel })}
+                  className="text-xs text-primary hover:underline"
+                >
+                  {discordChannel ? "Configure" : "Set Up"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Webhook Config Modal */}
+      {configModal && orgId && projectId && (
+        <WebhookConfigModal
+          type={configModal.type}
+          channel={configModal.channel}
+          orgId={orgId}
+          projectId={projectId}
+          onClose={() => setConfigModal(null)}
+          onSaved={loadChannels}
+        />
+      )}
+    </section>
+  );
+}
+
 // Empty alerts state component
 function EmptyAlertsState() {
   return (
@@ -462,6 +846,24 @@ export default function AlertsPageClient() {
   const params = useParams<{ orgSlug: string; projectSlug: string }>();
   const { orgSlug, projectSlug } = params;
   const [editingTemplate, setEditingTemplate] = useState<AlertTemplate | null>(null);
+  const [orgId, setOrgId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+
+  // Load org and project IDs for notification channels
+  useEffect(() => {
+    async function loadIds() {
+      try {
+        const orgRes = await apiFetch<DataEnvelope<{ id: string }>>(`/api/orgs/${orgSlug}`);
+        setOrgId(orgRes.data.id);
+
+        const projRes = await apiFetch<DataEnvelope<{ id: string }>>(`/api/orgs/${orgSlug}/projects/${projectSlug}`);
+        setProjectId(projRes.data.id);
+      } catch {
+        // IDs not critical for alert templates
+      }
+    }
+    loadIds();
+  }, [orgSlug, projectSlug]);
 
   // Fetch alert templates from API
   const { data, isLoading, error } = useQuery({
@@ -518,6 +920,9 @@ export default function AlertsPageClient() {
           onEditTemplate={setEditingTemplate}
         />
       ))}
+
+      {/* Notification Channels Section */}
+      <NotificationChannelsSection orgId={orgId} projectId={projectId} />
 
       {/* Error state */}
       {error && !isLoading && (
