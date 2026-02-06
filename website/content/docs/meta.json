@@ -18,6 +18,10 @@
     "sdk-reference/attributes",
     "---Dashboard---",
     "dashboard/pulse-view",
-    "dashboard/trace-inspector"
+    "dashboard/trace-inspector",
+    "---Alerts---",
+    "alerts/overview",
+    "alerts/slack-integration",
+    "alerts/discord-integration"
   ]
 }

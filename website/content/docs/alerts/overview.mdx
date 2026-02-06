@@ -1,0 +1,80 @@
+---
+title: Alerts Overview
+description: Set up alerts to monitor your application and get notified when issues occur.
+---
+
+Tracely's alerting system helps you stay on top of your application's health by notifying you when metrics exceed thresholds or critical events occur.
+
+## Alert Types
+
+### Threshold Alerts
+
+Monitor metrics and get notified when they exceed defined thresholds:
+
+- **Error Rate** — Alert when your error rate exceeds a percentage (e.g., > 5%)
+- **Latency (p95/p99)** — Alert when response times exceed acceptable limits
+- **Request Volume** — Alert on traffic spikes or drops
+
+Threshold alerts are evaluated every 60 seconds against aggregated metrics from the last minute.
+
+### Critical Alerts
+
+Get instant notifications for critical events:
+
+- **5xx Errors** — Immediate notification on server errors
+- **Slow Requests** — Alert when individual requests exceed a latency threshold
+
+Critical alerts are evaluated inline during request processing for real-time detection.
+
+## Notification Channels
+
+Tracely supports multiple notification channels to reach your team wherever they work:
+
+| Channel | Description |
+|---------|-------------|
+| **Email** | Notifications sent to organization admins and alert creators |
+| **Slack** | Rich messages via incoming webhooks |
+| **Discord** | Embed notifications via webhooks |
+
+Each project can configure one channel of each type. Channels can be enabled/disabled independently.
+
+## Setting Up Alerts
+
+1. Navigate to your project's **Alerts** page
+2. Click **Create Alert** to define alert rules
+3. Configure **Notification Channels** in the collapsible section at the bottom
+4. Test your channels to verify they're working
+
+## Alert Notifications
+
+When an alert fires, notifications include:
+
+- **Alert name** and severity level
+- **Project name** for context
+- **Metric value** that triggered the alert
+- **Threshold value** that was exceeded
+- **Timestamp** of when the alert fired
+- **Link** to the dashboard for investigation
+
+### Severity Colors
+
+Notifications are color-coded by severity:
+
+- **Critical** — Red (#FF0000)
+- **Warning** — Amber (#FFA500)
+- **Info** — Blue (#0000FF)
+
+## Cooldown Period
+
+To prevent alert fatigue, Tracely enforces a 5-minute cooldown between notifications for the same alert. If an alert continues to fire during the cooldown period, notifications are suppressed until the cooldown expires.
+
+## Next Steps
+
+<Cards>
+  <Card title="Slack Integration" href="/docs/alerts/slack-integration">
+    Set up Slack webhooks for team notifications.
+  </Card>
+  <Card title="Discord Integration" href="/docs/alerts/discord-integration">
+    Set up Discord webhooks for your server.
+  </Card>
+</Cards>

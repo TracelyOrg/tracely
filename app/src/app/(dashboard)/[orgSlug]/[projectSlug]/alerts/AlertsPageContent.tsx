@@ -361,24 +361,24 @@ function WebhookConfigModal({
             <>
               Create an incoming webhook in Slack and paste the URL below.{" "}
               <a
-                href="https://api.slack.com/messaging/webhooks"
+                href="https://tracely.sh/docs/alerts/slack-integration"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline inline-flex items-center gap-1"
               >
-                Learn more <ExternalLink className="size-3" />
+                View setup guide <ExternalLink className="size-3" />
               </a>
             </>
           ) : (
             <>
               Create a webhook in your Discord server settings.{" "}
               <a
-                href="https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks"
+                href="https://tracely.sh/docs/alerts/discord-integration"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline inline-flex items-center gap-1"
               >
-                Learn more <ExternalLink className="size-3" />
+                View setup guide <ExternalLink className="size-3" />
               </a>
             </>
           )}

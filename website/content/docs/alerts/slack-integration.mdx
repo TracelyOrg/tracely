@@ -1,0 +1,113 @@
+---
+title: Slack Integration
+description: Set up Slack webhooks to receive alert notifications in your Slack workspace.
+---
+
+Receive Tracely alert notifications directly in your Slack channels using incoming webhooks.
+
+## Prerequisites
+
+- A Slack workspace where you have permission to add apps
+- Admin or member access to the Tracely project
+
+## Step 1: Create a Slack App
+
+1. Go to the [Slack API Apps page](https://api.slack.com/apps)
+2. Click **Create New App**
+3. Choose **From scratch**
+4. Enter an app name (e.g., "Tracely Alerts") and select your workspace
+5. Click **Create App**
+
+## Step 2: Enable Incoming Webhooks
+
+1. In your app settings, go to **Incoming Webhooks** in the left sidebar
+2. Toggle **Activate Incoming Webhooks** to **On**
+3. Click **Add New Webhook to Workspace**
+4. Select the channel where you want to receive alerts
+5. Click **Allow**
+
+## Step 3: Copy the Webhook URL
+
+After authorization, you'll see a new webhook URL in this format:
+
+```text
+https://hooks.slack.com/services/<WORKSPACE_ID>/<CHANNEL_ID>/<TOKEN>
+```
+
+The URL will contain your workspace ID, channel ID, and a unique token. Copy this URL — you'll need it to configure Tracely.
+
+> [!WARNING]
+> Keep your webhook URL secret. Anyone with the URL can post messages to your channel.
+
+## Step 4: Configure in Tracely
+
+1. Navigate to your project's **Alerts** page
+2. Expand the **Notification Channels** section
+3. Find the **Slack** card and click **Configure**
+4. Paste your webhook URL
+5. Click **Save**
+
+## Step 5: Test the Integration
+
+1. Click the **Test** button on the Slack channel card
+2. Check your Slack channel for a test message
+3. If successful, you'll see a confirmation in Tracely
+
+## Message Format
+
+Tracely sends rich Slack messages using [Block Kit](https://api.slack.com/block-kit) for clear, actionable notifications:
+
+```
++------------------------------------------+
+|  Alert: High Error Rate                  |
+|  Project: my-api                         |
++------------------------------------------+
+|  Severity: CRITICAL                      |
+|  Error Rate: 10.5%                       |
+|  Threshold: 5.0%                         |
+|  Triggered: 2024-01-15 14:30:00 UTC      |
++------------------------------------------+
+|  [View Dashboard]                        |
++------------------------------------------+
+```
+
+Messages include:
+- Alert name and severity (color-coded)
+- Project name
+- Metric value vs threshold
+- Timestamp
+- Button to open the dashboard
+
+## Troubleshooting
+
+### "Webhook URL not configured"
+
+Make sure you've entered the full webhook URL starting with `https://hooks.slack.com/services/`.
+
+### "channel_not_found" error
+
+The webhook is tied to a specific channel. If the channel was deleted or renamed, create a new webhook for the correct channel.
+
+### Messages not appearing
+
+1. Check that the Slack channel is enabled in Tracely
+2. Verify the webhook URL is correct
+3. Ensure your Slack app hasn't been uninstalled
+4. Check if alerts are actually firing (view alert history)
+
+### Rate limiting
+
+Slack has rate limits on incoming webhooks. Tracely's 5-minute cooldown helps prevent hitting these limits, but if you have many alerts firing simultaneously, some messages may be delayed.
+
+## Best Practices
+
+1. **Create a dedicated channel** — Use a channel like `#alerts` or `#tracely-alerts` to keep notifications organized
+2. **Set channel notifications** — Configure Slack to notify you on new messages in the alerts channel
+3. **Use channel topics** — Add the project name to the channel topic for context
+4. **Consider multiple channels** — For multiple projects, consider separate channels per project or per severity level
+
+## Security Notes
+
+- Webhook URLs are stored encrypted in Tracely's database
+- URLs are never exposed in API responses (only the channel type and enabled status)
+- Rotate webhooks periodically by creating new ones in Slack and updating Tracely

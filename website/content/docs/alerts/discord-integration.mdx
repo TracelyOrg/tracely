@@ -1,0 +1,134 @@
+---
+title: Discord Integration
+description: Set up Discord webhooks to receive alert notifications in your Discord server.
+---
+
+Receive Tracely alert notifications directly in your Discord server using webhooks.
+
+## Prerequisites
+
+- A Discord server where you have **Manage Webhooks** permission
+- Admin or member access to the Tracely project
+
+## Step 1: Create a Discord Webhook
+
+1. Open your Discord server
+2. Right-click on the channel where you want to receive alerts
+3. Click **Edit Channel**
+4. Go to the **Integrations** tab
+5. Click **Webhooks**
+6. Click **New Webhook**
+
+## Step 2: Configure the Webhook
+
+1. Give your webhook a name (e.g., "Tracely Alerts")
+2. Optionally, upload a custom avatar (the Tracely logo works well)
+3. Click **Copy Webhook URL**
+
+The URL will look like:
+
+```
+https://discord.com/api/webhooks/1234567890/abcdefghijklmnopqrstuvwxyz
+```
+
+> [!WARNING]
+> Keep your webhook URL secret. Anyone with the URL can post messages to your channel.
+
+## Step 3: Configure in Tracely
+
+1. Navigate to your project's **Alerts** page
+2. Expand the **Notification Channels** section
+3. Find the **Discord** card and click **Configure**
+4. Paste your webhook URL
+5. Click **Save**
+
+## Step 4: Test the Integration
+
+1. Click the **Test** button on the Discord channel card
+2. Check your Discord channel for a test message
+3. If successful, you'll see a confirmation in Tracely
+
+## Message Format
+
+Tracely sends rich Discord messages using [embeds](https://discord.com/developers/docs/resources/webhook#execute-webhook) for clear, actionable notifications:
+
+The embed includes:
+- **Title** — Alert name with severity emoji
+- **Color** — Color-coded by severity (red/amber/blue)
+- **Description** — Project name
+- **Fields** — Metric value, threshold, and timestamp
+- **URL** — Click the title to open the dashboard
+- **Footer** — Tracely branding and timestamp
+
+### Example Embed
+
+```
++------------------------------------------+
+|  Alert: High Error Rate                  |
+|  Project: my-api                         |
+|                                          |
+|  Severity     CRITICAL                   |
+|  Error Rate   10.5%                      |
+|  Threshold    5.0%                       |
+|                                          |
+|  Triggered at 2024-01-15 14:30:00 UTC    |
++------------------------------------------+
+|  Tracely Alerts                          |
++------------------------------------------+
+```
+
+## Troubleshooting
+
+### "Webhook URL not configured"
+
+Make sure you've entered the full webhook URL starting with `https://discord.com/api/webhooks/`.
+
+### "Unknown Webhook" error
+
+The webhook may have been deleted. Create a new webhook in Discord and update the URL in Tracely.
+
+### Messages not appearing
+
+1. Check that the Discord channel is enabled in Tracely
+2. Verify the webhook URL is correct
+3. Ensure the webhook hasn't been deleted in Discord
+4. Check if alerts are actually firing (view alert history)
+5. Verify you have permission to view the channel
+
+### Embed not rendering correctly
+
+Discord webhooks occasionally have issues. Try:
+1. Testing the webhook again
+2. Checking Discord's status page for outages
+3. Creating a new webhook
+
+### Rate limiting
+
+Discord has rate limits on webhooks (30 requests per minute per channel). Tracely's 5-minute cooldown helps prevent hitting these limits.
+
+## Best Practices
+
+1. **Create a dedicated channel** — Use a channel like `#alerts` or `#tracely` to keep notifications organized
+2. **Set notification settings** — Configure Discord to notify you on new messages in the alerts channel
+3. **Use channel categories** — Group alert channels under an "Alerts" or "Monitoring" category
+4. **Set permissions** — Consider making the alerts channel read-only for most members
+5. **Pin important alerts** — Pin critical alert messages for visibility
+
+## Discord-Specific Features
+
+### Thread Support
+
+Currently, Tracely posts to the main channel. Thread support for grouping related alerts may be added in a future release.
+
+### Mentions
+
+Webhook messages cannot mention users or roles by default. If you need mentions, consider:
+- Setting up Discord's notification settings for the channel
+- Using Discord's built-in notification triggers based on keywords
+
+## Security Notes
+
+- Webhook URLs are stored encrypted in Tracely's database
+- URLs are never exposed in API responses (only the channel type and enabled status)
+- Discord webhooks can be regenerated at any time from the channel settings
+- Rotate webhooks periodically for security
