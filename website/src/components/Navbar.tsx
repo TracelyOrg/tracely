@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Search, Github, Menu, X, ArrowRight } from "lucide-react";
 
 export default function Navbar() {
@@ -25,8 +26,23 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto h-full flex items-center justify-between px-6">
       {/* Left: Logo */}
       <div className="flex items-center gap-8">
-        <Link href="/" className="text-sm font-semibold tracking-tight text-foreground">
-          Tracely
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/tracely-logo.png"
+            alt="Tracely"
+            width={140}
+            height={36}
+            className="dark:hidden"
+            priority
+          />
+          <Image
+            src="/tracely-logo-white.png"
+            alt="Tracely"
+            width={140}
+            height={36}
+            className="hidden dark:block"
+            priority
+          />
         </Link>
 
         {/* Center links — desktop */}

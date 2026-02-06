@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Home, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import Image from "next/image";
+import { CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
 import { useFilterStore } from "@/stores/filterStore";
@@ -239,14 +240,50 @@ export default function BreadcrumbPicker({
 
   return (
     <div className="flex items-center gap-1">
-      {/* Home link */}
+      {/* Home link - show logo on home page, icon elsewhere */}
       <button
         type="button"
         onClick={() => router.push("/")}
         className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
         aria-label="Home"
       >
-        <Home className="size-4" />
+        {currentOrgSlug ? (
+          <>
+            <Image
+              src="/tracely-icon.svg"
+              alt="Tracely"
+              width={26}
+              height={26}
+              className="dark:hidden"
+            />
+            <Image
+              src="/tracely-icon-white.svg"
+              alt="Tracely"
+              width={26}
+              height={26}
+              className="hidden dark:block"
+            />
+          </>
+        ) : (
+          <>
+            <Image
+              src="/tracely-logo.png"
+              alt="Tracely"
+              width={120}
+              height={32}
+              className="dark:hidden"
+              priority
+            />
+            <Image
+              src="/tracely-logo-white.png"
+              alt="Tracely"
+              width={120}
+              height={32}
+              className="hidden dark:block"
+              priority
+            />
+          </>
+        )}
       </button>
 
       {currentOrgSlug && <span className="text-muted-foreground">/</span>}
