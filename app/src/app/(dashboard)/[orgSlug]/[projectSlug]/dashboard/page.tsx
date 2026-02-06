@@ -1,19 +1,28 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
-import { useParams, useRouter, usePathname } from "next/navigation";
-import Link from "next/link";
+import { Suspense, useCallback, useEffect, useState, useRef } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { Activity, AlertTriangle, Clock, Zap, TrendingUp, TrendingDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { DataEnvelope } from "@/types/api";
-import type { LiveDashboardResponse } from "@/types/dashboard";
+import type { DashboardMetricsResponse } from "@/types/dashboard";
+import type { TimeRange, TimeRangePreset } from "@/types/span";
+import { useFilterStore } from "@/stores/filterStore";
+import { TimeframeSelector } from "@/components/shared/TimeframeSelector";
 import {
   RequestsWidget,
   ErrorRateWidget,
   LatencyWidget,
   ServiceStatusWidget,
   WidgetSkeleton,
+  ThroughputWidget,
+  StatusCodeWidget,
+  TopEndpointsWidget,
+  LatencyDistributionWidget,
+  ErrorsTimelineWidget,
+  MetricCard,
 } from "@/components/dashboard/widgets";
 
 interface ProjectInfo {
@@ -23,26 +32,27 @@ interface ProjectInfo {
   org_id: string;
 }
 
-// Tab configuration for dashboard views
-const DASHBOARD_TABS = [
-  { key: "live", label: "Live", href: (org: string, proj: string) => `/${org}/${proj}/dashboard` },
-  { key: "today", label: "Today", href: (org: string, proj: string) => `/${org}/${proj}/dashboard/today` },
-  { key: "week", label: "Week", href: (org: string, proj: string) => `/${org}/${proj}/dashboard/week` },
-] as const;
-
 // Skeleton grid for loading state
 function DashboardSkeleton() {
   return (
-    <div
-      className="grid gap-4"
-      style={{
-        gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-      }}
-    >
-      <WidgetSkeleton />
-      <WidgetSkeleton />
-      <WidgetSkeleton />
-      <WidgetSkeleton />
+    <div className="grid grid-cols-12 gap-4">
+      {/* Top row - metric cards */}
+      <div className="col-span-3"><WidgetSkeleton /></div>
+      <div className="col-span-3"><WidgetSkeleton /></div>
+      <div className="col-span-3"><WidgetSkeleton /></div>
+      <div className="col-span-3"><WidgetSkeleton /></div>
+
+      {/* Second row - charts */}
+      <div className="col-span-8 h-[200px]"><WidgetSkeleton /></div>
+      <div className="col-span-4 h-[200px]"><WidgetSkeleton /></div>
+
+      {/* Third row */}
+      <div className="col-span-6 h-[240px]"><WidgetSkeleton /></div>
+      <div className="col-span-6 h-[240px]"><WidgetSkeleton /></div>
+
+      {/* Fourth row */}
+      <div className="col-span-4 h-[280px]"><WidgetSkeleton /></div>
+      <div className="col-span-8 h-[280px]"><WidgetSkeleton /></div>
     </div>
   );
 }
@@ -52,33 +62,12 @@ function EmptyDashboard() {
   return (
     <div className="flex h-[400px] items-center justify-center">
       <div className="text-center">
+        <Activity className="mx-auto size-12 text-muted-foreground/50 mb-4" />
         <p className="text-lg font-medium text-muted-foreground">No metrics available</p>
         <p className="mt-1 text-sm text-muted-foreground/70">
-          Start sending requests to see real-time dashboard metrics
+          Start sending requests to see dashboard metrics
         </p>
       </div>
-    </div>
-  );
-}
-
-// Tab navigation component (AC1, Task 1.3)
-function DashboardTabs({ orgSlug, projectSlug, activeTab }: { orgSlug: string; projectSlug: string; activeTab: string }) {
-  return (
-    <div className="flex items-center gap-1 border-b mb-4">
-      {DASHBOARD_TABS.map((tab) => (
-        <Link
-          key={tab.key}
-          href={tab.href(orgSlug, projectSlug)}
-          className={cn(
-            "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
-            activeTab === tab.key
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-          )}
-        >
-          {tab.label}
-        </Link>
-      ))}
     </div>
   );
 }
@@ -94,7 +83,7 @@ export default function DashboardPage() {
 function DashboardPageSkeleton() {
   return (
     <div className="p-4">
-      <div className="h-10 mb-4" /> {/* Tabs placeholder */}
+      <div className="h-12 mb-4" />
       <DashboardSkeleton />
     </div>
   );
@@ -103,16 +92,61 @@ function DashboardPageSkeleton() {
 function DashboardPageContent() {
   const params = useParams<{ orgSlug: string; projectSlug: string }>();
   const { orgSlug, projectSlug } = params;
-  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
-  // Determine active tab from pathname
-  const activeTab = pathname.includes("/today")
-    ? "today"
-    : pathname.includes("/week")
-    ? "week"
-    : "live";
+  // Get timeRange from filter store (shared with Pulse View)
+  const { filters, setTimeRange } = useFilterStore();
+  const timeRange = filters.timeRange;
 
-  // Fetch project ID for API calls
+  // Hydrate from URL on mount
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    const time = searchParams.get("time");
+    const start = searchParams.get("start");
+    const end = searchParams.get("end");
+
+    if (time) {
+      const validPresets = new Set(["5m", "15m", "1h", "6h", "24h", "custom"]);
+      if (validPresets.has(time)) {
+        setTimeRange({
+          preset: time as TimeRangePreset,
+          start: start ?? undefined,
+          end: end ?? undefined,
+        });
+      }
+    }
+  }, [searchParams, setTimeRange]);
+
+  // Sync timeRange to URL
+  useEffect(() => {
+    const params = new URLSearchParams();
+
+    if (timeRange.preset !== "5m") {
+      params.set("time", timeRange.preset);
+    }
+    if (timeRange.preset === "custom") {
+      if (timeRange.start) params.set("start", timeRange.start);
+      if (timeRange.end) params.set("end", timeRange.end);
+    }
+
+    const search = params.toString();
+    const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
+    window.history.replaceState(null, "", newUrl);
+  }, [timeRange]);
+
+  // Handle timeframe change
+  const handleTimeRangeChange = useCallback(
+    (range: TimeRange) => {
+      setTimeRange(range);
+    },
+    [setTimeRange]
+  );
+
+  // Fetch project ID
   const [projectId, setProjectId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -135,56 +169,156 @@ function DashboardPageContent() {
     };
   }, [orgSlug, projectSlug]);
 
-  // React Query with 5s polling for live metrics (AC1, Task 4.1)
+  // React Query for dashboard metrics
   const {
     data: dashboardData,
     isLoading,
     error,
-  } = useQuery<LiveDashboardResponse>({
-    queryKey: ["dashboard", "live", projectId],
+  } = useQuery<DashboardMetricsResponse>({
+    queryKey: ["dashboard", "metrics", projectId, timeRange.preset, timeRange.start, timeRange.end],
     queryFn: async () => {
       if (!projectId) throw new Error("No project ID");
-      const res = await apiFetch<DataEnvelope<LiveDashboardResponse>>(
-        `/api/orgs/${orgSlug}/projects/${projectSlug}/dashboard/live`
+      // Build API query params inside queryFn to avoid stale closure
+      const params = new URLSearchParams();
+      params.set("time", timeRange.preset);
+      if (timeRange.preset === "custom") {
+        if (timeRange.start) params.set("start", timeRange.start);
+        if (timeRange.end) params.set("end", timeRange.end);
+      }
+      const res = await apiFetch<DataEnvelope<DashboardMetricsResponse>>(
+        `/api/orgs/${orgSlug}/projects/${projectSlug}/dashboard/metrics?${params.toString()}`
       );
       return res.data;
     },
-    enabled: !!projectId && activeTab === "live",
-    refetchInterval: 5000, // 5 second polling (AC1)
-    staleTime: 4000,
+    enabled: !!projectId,
+    refetchInterval: timeRange.preset !== "custom" ? 10000 : false, // 10s polling for live presets
+    staleTime: 8000,
   });
 
+  // Log error for debugging
+  if (error) {
+    console.error("Dashboard metrics fetch error:", error);
+  }
+
   const showLoading = isLoading || !projectId;
-  const showEmpty = !isLoading && projectId && (!dashboardData || dashboardData.services.length === 0);
-  const showData = !isLoading && dashboardData && dashboardData.services.length > 0;
+  // Show data if we have any metrics (total_requests, services, endpoints, or time series)
+  const hasData = dashboardData && (
+    dashboardData.total_requests > 0 ||
+    dashboardData.services.length > 0 ||
+    dashboardData.top_endpoints.length > 0 ||
+    dashboardData.requests_per_minute.length > 0 ||
+    dashboardData.status_codes.length > 0
+  );
+  const showEmpty = !isLoading && projectId && !hasData;
+  const showData = !isLoading && dashboardData && hasData;
+
+  // Prepare data for widgets
+  const statusCodeData = dashboardData?.status_codes.map((sc) => ({
+    code: sc.code,
+    count: sc.count,
+    color:
+      sc.code === "2xx"
+        ? "hsl(142, 76%, 36%)"
+        : sc.code === "3xx"
+        ? "hsl(221, 83%, 53%)"
+        : sc.code === "4xx"
+        ? "hsl(38, 92%, 50%)"
+        : "hsl(0, 84%, 60%)",
+  })) || [];
+
+  const endpointData = dashboardData?.top_endpoints.map((ep) => ({
+    route: ep.route,
+    method: ep.method,
+    count: ep.count,
+    avgLatency: ep.avg_latency,
+    errorRate: ep.error_rate,
+  })) || [];
+
+  // Calculate trends (mock for now - would compare to previous period)
+  const errorTrend = dashboardData && dashboardData.error_rate > 1 ? "up" : "down";
 
   return (
-    <div className="p-4">
-      {/* Tab navigation (Task 1.3, 1.4 - Live is default) */}
-      <DashboardTabs orgSlug={orgSlug} projectSlug={projectSlug} activeTab={activeTab} />
+    <div className="p-4 space-y-4">
+      {/* Header with timeframe selector */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <TimeframeSelector
+          timeRange={timeRange}
+          onTimeRangeChange={handleTimeRangeChange}
+          variant="inline"
+        />
+      </div>
 
-      {/* Widget grid with CSS Grid layout (AC1, Task 1.2) */}
+      {/* Content */}
       {showLoading && <DashboardSkeleton />}
       {showEmpty && <EmptyDashboard />}
-      {showData && (
-        <div
-          className="grid gap-4"
-          style={{
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          }}
-          data-testid="dashboard-widget-grid"
-        >
-          {/* Requests per minute sparkline (Task 2.1) */}
-          <RequestsWidget data={dashboardData.requests_per_minute} />
+      {showData && dashboardData && (
+        <div className="grid grid-cols-12 gap-4">
+          {/* Row 1: Metric Cards */}
+          <MetricCard
+            title="Total Requests"
+            value={dashboardData.total_requests.toLocaleString()}
+            icon={<Activity className="size-5" />}
+            className="col-span-12 sm:col-span-6 lg:col-span-3"
+          />
+          <MetricCard
+            title="Error Rate"
+            value={`${dashboardData.error_rate.toFixed(2)}%`}
+            subtitle={`${dashboardData.total_errors} errors`}
+            trend={errorTrend}
+            trendValue={errorTrend === "up" ? "Increasing" : "Normal"}
+            icon={<AlertTriangle className="size-5" />}
+            variant={dashboardData.error_rate > 5 ? "danger" : dashboardData.error_rate > 1 ? "warning" : "default"}
+            className="col-span-12 sm:col-span-6 lg:col-span-3"
+          />
+          <MetricCard
+            title="P95 Latency"
+            value={dashboardData.p95_latency >= 1000 ? `${(dashboardData.p95_latency / 1000).toFixed(2)}s` : `${Math.round(dashboardData.p95_latency)}ms`}
+            subtitle={`Avg: ${Math.round(dashboardData.avg_latency)}ms`}
+            icon={<Clock className="size-5" />}
+            variant={dashboardData.p95_latency > 2000 ? "danger" : dashboardData.p95_latency > 500 ? "warning" : "default"}
+            className="col-span-12 sm:col-span-6 lg:col-span-3"
+          />
+          <MetricCard
+            title="P50 Latency"
+            value={dashboardData.p50_latency >= 1000 ? `${(dashboardData.p50_latency / 1000).toFixed(2)}s` : `${Math.round(dashboardData.p50_latency)}ms`}
+            subtitle={`P99: ${Math.round(dashboardData.p99_latency)}ms`}
+            icon={<Zap className="size-5" />}
+            className="col-span-12 sm:col-span-6 lg:col-span-3"
+          />
 
-          {/* Error rate gauge (Task 2.2, 2.6) */}
-          <ErrorRateWidget errorRate={dashboardData.error_rate} />
+          {/* Row 2: Main charts */}
+          <ThroughputWidget
+            data={dashboardData.requests_per_minute}
+            className="col-span-12 lg:col-span-8"
+          />
+          <StatusCodeWidget
+            data={statusCodeData}
+            className="col-span-12 sm:col-span-6 lg:col-span-4"
+          />
 
-          {/* P95 latency display (Task 2.3) */}
-          <LatencyWidget p95Latency={dashboardData.p95_latency} />
+          {/* Row 3: Secondary charts */}
+          <ErrorsTimelineWidget
+            data={dashboardData.errors_per_minute}
+            className="col-span-12 lg:col-span-6"
+          />
+          <LatencyDistributionWidget
+            data={dashboardData.latency_distribution}
+            p50={dashboardData.p50_latency}
+            p95={dashboardData.p95_latency}
+            p99={dashboardData.p99_latency}
+            className="col-span-12 lg:col-span-6"
+          />
 
-          {/* Service status indicators (Task 2.4) */}
-          <ServiceStatusWidget services={dashboardData.services} />
+          {/* Row 4: Lists and service status */}
+          <TopEndpointsWidget
+            endpoints={endpointData}
+            className="col-span-12 lg:col-span-7"
+          />
+          <ServiceStatusWidget
+            services={dashboardData.services}
+            className="col-span-12 lg:col-span-5"
+          />
         </div>
       )}
     </div>

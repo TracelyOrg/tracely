@@ -104,7 +104,7 @@ export function RequestsWidget({ data, className }: RequestsWidgetProps) {
                 borderRadius: "6px",
                 fontSize: "12px",
               }}
-              formatter={(value: number) => [formatValue(value), "req/min"]}
+              formatter={(value) => [formatValue(Number(value)), "req/min"]}
             />
             <Area
               type="monotone"

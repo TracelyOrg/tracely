@@ -13,9 +13,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tracely — Real-time observability for Python",
+  title: {
+    template: "%s - Tracely",
+    default: "Tracely — Real-time observability for Python",
+  },
   description:
     "Monitor your Python apps in real-time. Zero-config auto-instrumentation for FastAPI, Django, and Flask with smart data redaction and live request streaming.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  manifest: "/site.webmanifest",
+  appleWebApp: {
+    title: "Tracely",
+  },
   openGraph: {
     title: "Tracely — Real-time observability for Python",
     description:

@@ -238,6 +238,20 @@ export default function DashboardLayout({
                   )}
                 </Link>
                 <Link
+                  href={`/${currentOrgSlug}/${currentProjectSlug}/alerts`}
+                  className={cn(
+                    "relative py-3 text-sm font-medium transition-colors",
+                    pathname.includes("/alerts")
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Alerts
+                  {pathname.includes("/alerts") && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                  )}
+                </Link>
+                <Link
                   href={`/${currentOrgSlug}/${currentProjectSlug}/settings`}
                   className={cn(
                     "relative py-3 text-sm font-medium transition-colors",
