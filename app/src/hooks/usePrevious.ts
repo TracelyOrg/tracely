@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Hook that returns the previous value of a variable.
@@ -8,11 +8,13 @@ import { useEffect, useRef } from "react";
  * @returns The previous value (undefined on first render)
  */
 export function usePrevious<T>(value: T): T | undefined {
-  const ref = useRef<T | undefined>(undefined);
+  const [previous, setPrevious] = useState<T | undefined>(undefined);
+  const currentRef = useRef<T>(value);
 
   useEffect(() => {
-    ref.current = value;
+    setPrevious(currentRef.current);
+    currentRef.current = value;
   }, [value]);
 
-  return ref.current;
+  return previous;
 }

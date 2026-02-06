@@ -258,11 +258,11 @@ async def test_event_generator_disconnects_on_close():
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_interval_is_15s():
-    """Heartbeat interval constant is 15 seconds per AC1."""
+async def test_heartbeat_interval_is_5s():
+    """Heartbeat interval constant is 5 seconds for better connection stability."""
     from app.routers.stream import HEARTBEAT_INTERVAL_S
 
-    assert HEARTBEAT_INTERVAL_S == 15
+    assert HEARTBEAT_INTERVAL_S == 5
 
 
 @pytest.mark.asyncio

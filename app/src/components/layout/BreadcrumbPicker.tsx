@@ -115,10 +115,16 @@ export default function BreadcrumbPicker({
   const spans = useLiveStreamStore((s) => s.spans);
   const childrenMap = useLiveStreamStore((s) => s.childrenMap);
 
+  // State-based current time for pure useMemo computation
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Compute real-time health status from recent spans
   const realtimeStatus = useMemo((): HealthStatus | null => {
-    const now = Date.now();
-    const cutoff = now - REALTIME_WINDOW_MS;
+    const cutoff = currentTime - REALTIME_WINDOW_MS;
 
     // Collect all spans (roots + children) that are completed (not pending)
     const allSpans = [
@@ -149,7 +155,7 @@ export default function BreadcrumbPicker({
     const p95 = durations[Math.min(p95Index, durations.length - 1)];
 
     return calculateStatusFromMetrics(errorRate, p95);
-  }, [spans, childrenMap]);
+  }, [spans, childrenMap, currentTime]);
 
   // Use real-time status if available, otherwise fall back to API data
   const worstStatus = useMemo(() => {

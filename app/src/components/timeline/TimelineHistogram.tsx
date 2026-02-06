@@ -141,7 +141,7 @@ export function TimelineHistogram({
         />
         {isLive && (
           <ReferenceLine
-            x={Date.now()}
+            x={rangeEnd}
             stroke="#22c55e"
             strokeWidth={2}
             strokeDasharray="4 2"

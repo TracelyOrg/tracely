@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState, useRef } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertTriangle, Clock, Zap, TrendingUp, TrendingDown } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -93,7 +93,6 @@ function DashboardPageInner() {
   const params = useParams<{ orgSlug: string; projectSlug: string }>();
   const { orgSlug, projectSlug } = params;
   const searchParams = useSearchParams();
-  const router = useRouter();
 
   // Get timeRange from filter store (shared with Pulse View)
   const { filters, setTimeRange } = useFilterStore();

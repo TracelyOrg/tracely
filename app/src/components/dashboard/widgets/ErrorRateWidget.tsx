@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,9 @@ export function ErrorRateWidget({ errorRate, className }: ErrorRateWidgetProps) 
 
   useEffect(() => {
     if (isIncreasing && errorRate >= 1) {
-      setShowFlash(true);
+      startTransition(() => {
+        setShowFlash(true);
+      });
       const timer = setTimeout(() => setShowFlash(false), 500);
       return () => clearTimeout(timer);
     }

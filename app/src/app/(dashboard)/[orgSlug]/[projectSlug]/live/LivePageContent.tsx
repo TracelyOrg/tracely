@@ -271,10 +271,16 @@ function LiveHeader({
   const spans = useLiveStreamStore((s) => s.spans);
   const childrenMap = useLiveStreamStore((s) => s.childrenMap);
 
+  // State-based current time for pure useMemo computation
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Compute real-time metrics from recent spans
   const aggregatedMetrics = useMemo(() => {
-    const now = Date.now();
-    const cutoff = now - REALTIME_WINDOW_MS;
+    const cutoff = currentTime - REALTIME_WINDOW_MS;
 
     // Collect all completed spans from the time window
     const allSpans = [
@@ -310,7 +316,7 @@ function LiveHeader({
     }
 
     return { totalRequestRate, avgErrorRate, maxP95 };
-  }, [spans, childrenMap]);
+  }, [spans, childrenMap, currentTime]);
 
   // Metrics are always ready when we have spans (no loading state needed)
   const healthLoading = false;

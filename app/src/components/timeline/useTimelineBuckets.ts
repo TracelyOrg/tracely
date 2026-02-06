@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
 import {
@@ -26,6 +26,17 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
   const childrenMap = useLiveStreamStore((state) => state.childrenMap);
   const timeRange = useFilterStore((state) => state.filters.timeRange);
 
+  // State-based current time for pure useMemo computation
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const isLivePreset = timeRange.preset !== "custom";
+
+  // Update current time periodically for live presets
+  useEffect(() => {
+    if (!isLivePreset) return;
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isLivePreset]);
+
   // Flatten all spans (roots + children) for bucketing
   const allSpans = useMemo<SpanEvent[]>(() => {
     const result: SpanEvent[] = [...spans];
@@ -37,8 +48,6 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
 
   // Compute time range bounds
   const { rangeStart, rangeEnd, isLive } = useMemo(() => {
-    const now = Date.now();
-
     if (timeRange.preset === "custom" && timeRange.start && timeRange.end) {
       return {
         rangeStart: new Date(timeRange.start).getTime(),
@@ -49,11 +58,11 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
 
     const rangeMs = presetToRangeMs(timeRange.preset);
     return {
-      rangeStart: now - rangeMs,
-      rangeEnd: now,
+      rangeStart: currentTime - rangeMs,
+      rangeEnd: currentTime,
       isLive: true,
     };
-  }, [timeRange]);
+  }, [timeRange, currentTime]);
 
   // Compute granularity based on range
   const granularity = useMemo(() => {
