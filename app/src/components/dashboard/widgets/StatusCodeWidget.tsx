@@ -1,12 +1,15 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from "recharts";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
+import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
+import { statusCodeChartColor } from "@/lib/dashboardChartTheme";
+import { DASHBOARD_METRIC_HELP } from "@/lib/dashboardMetricHelp";
+import { cn } from "@/lib/utils";
 
 export interface StatusCodeData {
   code: string;
   count: number;
-  color: string;
+  color?: string;
 }
 
 interface StatusCodeWidgetProps {
@@ -14,83 +17,53 @@ interface StatusCodeWidgetProps {
   className?: string;
 }
 
-const DEFAULT_DATA: StatusCodeData[] = [
-  { code: "2xx", count: 0, color: "hsl(var(--success))" },
-  { code: "3xx", count: 0, color: "hsl(var(--info))" },
-  { code: "4xx", count: 0, color: "hsl(var(--warning))" },
-  { code: "5xx", count: 0, color: "hsl(var(--destructive))" },
-];
+const EMPTY_CODES = ["2xx", "3xx", "4xx", "5xx"];
 
-/**
- * Status code distribution donut chart.
- * Shows the breakdown of responses by status code category.
- */
 export function StatusCodeWidget({ data, className }: StatusCodeWidgetProps) {
-  const chartData = data.length > 0 ? data : DEFAULT_DATA;
+  const chartData =
+    data.length > 0
+      ? data.map((d) => ({ ...d, color: d.color ?? statusCodeChartColor(d.code) }))
+      : EMPTY_CODES.map((code) => ({ code, count: 0, color: statusCodeChartColor(code) }));
+
   const total = chartData.reduce((sum, d) => sum + d.count, 0);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const renderCustomLabel = (props: any) => {
-    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
-    if (percent < 0.05) return null;
-    const RADIAN = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="white"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={11}
-        fontWeight={600}
-      >
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    );
-  };
-
   return (
-    <motion.div
-      data-testid="status-code-widget"
+    <DashboardPanel
+      title="Status codes"
+      description={DASHBOARD_METRIC_HELP.statusCodes}
+      testId="status-code-widget"
       className={className}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      action={
+        <span className="text-sm font-semibold tabular-nums text-foreground">
+          {total.toLocaleString()}
+        </span>
+      }
     >
-      <div className="rounded-xl border bg-card p-4 h-full">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Status Codes</h3>
-          <span className="text-lg font-bold tabular-nums">{total.toLocaleString()}</span>
-        </div>
-
-        <div className="h-[180px]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="mx-auto h-[140px] w-[140px] shrink-0 sm:mx-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
-                innerRadius={45}
-                outerRadius={70}
+                innerRadius={42}
+                outerRadius={62}
                 paddingAngle={2}
                 dataKey="count"
                 nameKey="code"
-                labelLine={false}
-                label={renderCustomLabel}
+                stroke="var(--background)"
+                strokeWidth={2}
               >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
+                {chartData.map((entry) => (
+                  <Cell key={entry.code} fill={entry.color} />
                 ))}
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "6px",
                   fontSize: "12px",
                 }}
                 formatter={(value, name) => [
@@ -98,18 +71,38 @@ export function StatusCodeWidget({ data, className }: StatusCodeWidgetProps) {
                   name,
                 ]}
               />
-              <Legend
-                verticalAlign="bottom"
-                height={36}
-                formatter={(value) => (
-                  <span style={{ color: "hsl(var(--foreground))", fontSize: "12px" }}>{value}</span>
-                )}
-              />
             </PieChart>
           </ResponsiveContainer>
         </div>
+
+        <ul className="flex-1 space-y-2.5">
+          {chartData.map((entry) => {
+            const pct = total > 0 ? (entry.count / total) * 100 : 0;
+            return (
+              <li
+                key={entry.code}
+                className="flex min-h-9 items-center justify-between gap-3 text-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className="size-2 shrink-0 rounded-sm"
+                    style={{ backgroundColor: entry.color }}
+                    aria-hidden
+                  />
+                  <span className="font-medium">{entry.code}</span>
+                </span>
+                <span className="tabular-nums text-muted-foreground">
+                  {pct.toFixed(1)}%
+                  <span className={cn("ml-2 text-foreground")}>
+                    {entry.count.toLocaleString()}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
-    </motion.div>
+    </DashboardPanel>
   );
 }
 

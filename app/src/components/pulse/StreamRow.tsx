@@ -5,8 +5,8 @@ import { formatDuration } from "@/lib/formatDuration";
 import type { SpanEvent } from "@/types/span";
 
 function statusColorClass(code: number): string {
-  if (code >= 200 && code < 300) return "text-emerald-500";
-  if (code >= 400) return "text-red-500";
+  if (code >= 200 && code < 300) return "text-success";
+  if (code >= 400) return "text-destructive";
   return "text-muted-foreground";
 }
 
@@ -72,18 +72,18 @@ export const StreamRow = memo(function StreamRow({
         if (e.key === "Enter" && onClick) onClick();
       }}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 text-sm font-mono border-b border-border/50 cursor-pointer transition-colors hover:bg-accent/50",
+        "flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-mono border-b border-border/50 cursor-pointer transition-colors hover:bg-accent/50",
         isPending && "opacity-70",
         isSelected && "bg-accent"
       )}
     >
       {/* Timestamp — fixed width */}
-      <span className="shrink-0 w-[60px] text-xs text-muted-foreground/70 tabular-nums">
+      <span className="hidden sm:inline-flex shrink-0 w-[60px] text-xs text-muted-foreground/70 tabular-nums">
         {!isPending ? formatTimestamp(span.start_time) : "\u00A0"}
       </span>
 
       {/* Service name — fixed width */}
-      <span className="shrink-0 w-20 text-xs text-muted-foreground/70 truncate" title={serviceName}>
+      <span className="hidden md:block shrink-0 w-20 text-xs text-muted-foreground/70 truncate" title={serviceName}>
         {serviceName}
       </span>
 
@@ -95,9 +95,9 @@ export const StreamRow = memo(function StreamRow({
             className={cn(
               "inline-flex h-5 items-center gap-0.5 rounded px-1.5 text-[11px] font-medium tabular-nums border transition-colors",
               span.http_status_code >= 400
-                ? "border-red-500/30 text-red-500 hover:bg-red-500/10"
+                ? "border-destructive/30 text-destructive hover:bg-destructive/10"
                 : span.http_status_code >= 200 && span.http_status_code < 300
-                  ? "border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10"
+                  ? "border-success/30 text-success hover:bg-success/10"
                   : "border-border text-muted-foreground hover:bg-accent"
             )}
             tabIndex={-1}
@@ -118,7 +118,7 @@ export const StreamRow = memo(function StreamRow({
       <span className="min-w-0 flex-1 truncate text-foreground">
         {isPending ? (
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-warning" />
             <Loader size={12} className="animate-spin text-muted-foreground" />
             <span>{method} {route}</span>
             <span className="text-xs text-muted-foreground">In Progress</span>

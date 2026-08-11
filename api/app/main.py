@@ -4,15 +4,24 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import ValidationError
-
 from app.config import settings
 from app.db.clickhouse import close_clickhouse, init_clickhouse
 from app.db.redis import close_redis, init_redis
-from app.routers import alerts, api_keys, auth, dashboard, health, ingest, invitations, members, notifications, organizations, projects, spans, stream
+from app.routers import (
+    alerts,
+    api_keys,
+    auth,
+    dashboard,
+    health,
+    ingest,
+    invitations,
+    members,
+    notifications,
+    organizations,
+    projects,
+    spans,
+    stream,
+)
 from app.services.alert_scheduler import start_scheduler, stop_scheduler
 from app.utils.envelope import error
 from app.utils.exceptions import (
@@ -23,6 +32,10 @@ from app.utils.exceptions import (
     TooManyRequestsError,
     UnauthorizedError,
 )
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +77,9 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
 
     @app.exception_handler(BadRequestError)
-    async def bad_request_handler(request: Request, exc: BadRequestError) -> JSONResponse:
+    async def bad_request_handler(
+        request: Request, exc: BadRequestError
+    ) -> JSONResponse:
         return JSONResponse(
             status_code=400,
             content=error("BAD_REQUEST", exc.message),
@@ -126,3 +141,11 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+@app.get("/")
+async def hello_world() -> JSONResponse:
+    return JSONResponse(
+        status_code=200,
+        content={"message": "what are you doing here?"},
+    )

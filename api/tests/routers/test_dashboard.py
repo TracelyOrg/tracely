@@ -261,10 +261,10 @@ async def test_health_service_caches_result():
     with (
         patch("app.services.dashboard_service.cache_get") as mock_cache_get,
         patch("app.services.dashboard_service.cache_set") as mock_cache_set,
-        patch("app.services.dashboard_service.get_clickhouse_client") as mock_ch,
+        patch("app.services.dashboard_service.ch_query") as mock_ch_query,
     ):
         mock_cache_get.return_value = None  # Cache miss
-        mock_ch.return_value.query = MagicMock(return_value=mock_ch_result)
+        mock_ch_query.return_value = mock_ch_result
 
         result = await dashboard_service.get_project_health(org_id, project_id)
 
@@ -317,19 +317,18 @@ async def test_clickhouse_query_includes_org_id_filter():
     with (
         patch("app.services.dashboard_service.cache_get") as mock_cache_get,
         patch("app.services.dashboard_service.cache_set"),
-        patch("app.services.dashboard_service.get_clickhouse_client") as mock_ch,
-        patch("asyncio.to_thread") as mock_to_thread,
+        patch("app.services.dashboard_service.ch_query") as mock_ch_query,
     ):
         mock_cache_get.return_value = None
         mock_result = MagicMock()
         mock_result.result_rows = []
-        mock_to_thread.return_value = mock_result
+        mock_ch_query.return_value = mock_result
 
         await dashboard_service.get_project_health(org_id, project_id)
 
-    # Verify to_thread was called with query containing org_id parameter
-    call_args = mock_to_thread.call_args
-    query_params = call_args.kwargs.get("parameters", call_args[1].get("parameters", {}))
+    # Verify ch_query was called with a query containing org_id parameter
+    call_args = mock_ch_query.call_args
+    query_params = call_args.kwargs.get("parameters", {})
     assert str(org_id) in str(query_params.get("org_id", ""))
 
 
@@ -490,12 +489,11 @@ async def test_live_dashboard_caches_result():
     with (
         patch("app.services.dashboard_service.cache_get") as mock_cache_get,
         patch("app.services.dashboard_service.cache_set") as mock_cache_set,
-        patch("app.services.dashboard_service.get_clickhouse_client") as mock_ch,
-        patch("asyncio.to_thread") as mock_to_thread,
+        patch("app.services.dashboard_service.ch_query") as mock_ch_query,
     ):
         mock_cache_get.return_value = None  # Cache miss
         # Return different results for each query
-        mock_to_thread.side_effect = [
+        mock_ch_query.side_effect = [
             mock_sparkline_result,
             mock_aggregates_result,
             mock_services_result,

@@ -1,0 +1,97 @@
+# Local dev stack: hot reload for the Next app (bind-mount + Dockerfile.dev).
+# Usage: docker compose -f docker-compose.dev.yml up --build
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://tracely:tracely@postgres:5432/tracely}
+      CLICKHOUSE_URL: ${CLICKHOUSE_URL:-http://clickhouse:8123}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - dokploy-network
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3010:3000"
+    volumes:
+      - ./app:/app
+      - app_node_modules:/app/node_modules
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      API_URL: ${API_URL:-http://api:8000}
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - dokploy-network
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: tracely
+      POSTGRES_PASSWORD: tracely
+      POSTGRES_DB: tracely
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracely"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dokploy-network
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - chdata_dev:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dokploy-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dokploy-network
+
+volumes:
+  pgdata_dev:
+  chdata_dev:
+  redisdata_dev:
+  app_node_modules:
+
+networks:
+  dokploy-network:

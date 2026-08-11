@@ -1,28 +1,51 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import dynamic from "next/dynamic";
+import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Wifi, WifiOff, ArrowDown, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock, Search, ChevronDown } from "lucide-react";
+import { Wifi, WifiOff, Check, Copy, Terminal, Code, BookOpen, RefreshCw, Clock, Search, ChevronDown, AlertTriangle, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { DataEnvelope } from "@/types/api";
-import type { SpanEvent, TimeRangePreset } from "@/types/span";
+import type { SpanEvent, StreamFilters, TimeRangePreset } from "@/types/span";
 import { useEventStream } from "@/hooks/useEventStream";
 import { useSpanDetail } from "@/hooks/useSpanDetail";
+import { useHealthData } from "@/hooks/useHealthData";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
-import { matchesFilters } from "@/lib/filterUtils";
-import { StreamRow } from "@/components/pulse/StreamRow";
-import { ChildSpanRow } from "@/components/pulse/ChildSpanRow";
-import { SpanInspector } from "@/components/pulse/SpanInspector";
+import { matchesFilters, presetToMs } from "@/lib/filterUtils";
+import { aggregateProjectHealthMetrics } from "@/lib/healthMetrics";
+import { StreamList } from "@/components/pulse/StreamList";
+import { STREAM_ROW_HEIGHT, STREAM_SKELETON_WIDTHS } from "@/components/pulse/streamListTypes";
 import { TimelineBar } from "@/components/timeline";
-import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut";
 
-type DisplayItem =
-  | { type: "root"; span: SpanEvent; childCount: number; hasErrorChildren: boolean; isExpanded: boolean }
-  | { type: "child"; span: SpanEvent; depth: number; childCount: number; isLast: boolean };
+const DateRangePicker = dynamic(
+  () =>
+    import("@/components/shared/DateRangePicker").then((m) => ({
+      default: m.DateRangePicker,
+    })),
+  {
+    loading: () => <div className="h-7 w-36 animate-pulse rounded-md bg-muted" />,
+  }
+);
+
+const SpanInspector = dynamic(
+  () =>
+    import("@/components/pulse/SpanInspector").then((m) => ({
+      default: m.SpanInspector,
+    })),
+  { ssr: false, loading: () => <div className="h-full animate-pulse bg-muted/30" /> }
+);
+
+export interface LivePageClientProps {
+  orgSlug: string;
+  projectSlug: string;
+  /** From server prefetch; null triggers a client-side fallback fetch. */
+  projectId: string | null;
+  initialSpans: SpanEvent[];
+  initialHasMoreHistory: boolean;
+}
 
 interface ProjectInfo {
   id: string;
@@ -48,17 +71,12 @@ interface ApiKeyCreatedResponse {
   created_at: string;
 }
 
-const ROW_HEIGHT = 40;
-
-// Pre-computed widths for skeleton rows (pure — no Math.random during render)
-const SKELETON_WIDTHS = [55, 42, 68, 47, 60, 50, 63, 45, 57, 52, 65, 48];
-
-// --- Skeleton Loading (AC4, UX7) ---
+const ROW_HEIGHT = STREAM_ROW_HEIGHT;
 
 function PulseSkeleton() {
   return (
     <div className="flex flex-col gap-0">
-      {SKELETON_WIDTHS.map((w, i) => (
+      {STREAM_SKELETON_WIDTHS.map((w, i) => (
         <div
           key={i}
           className="flex items-center gap-3 border-b border-border/50 px-4 py-2"
@@ -142,7 +160,8 @@ function EmptyState({ orgSlug, projectSlug }: { orgSlug: string; projectSlug: st
     }
   }, [basePath]);
 
-  // On mount: if no keys → auto-generate; if keys exist → show prefix
+  // On mount: check for existing keys and show the prefix — never create one
+  // without the user explicitly asking (AC4)
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
@@ -152,17 +171,16 @@ function EmptyState({ orgSlug, projectSlug }: { orgSlug: string; projectSlug: st
         const res = await apiFetch<DataEnvelope<ApiKeyItem[]>>(basePath);
         if (res.data.length > 0) {
           setKeyPrefix(res.data[0].prefix);
-        } else {
-          generateKey();
         }
       } catch {
         // Non-blocking
       }
     }
     init();
-  }, [basePath, generateKey]);
+  }, [basePath]);
 
   const hasFullKey = fullKey !== null;
+  const hasAnyKey = hasFullKey || keyPrefix !== null;
   const displayKey = fullKey ?? (keyPrefix ? `${keyPrefix}...` : "your_api_key_here");
   const installSnippet = `pip install tracely-sdk
 export TRACELY_API_KEY="${displayKey}"`;
@@ -198,7 +216,20 @@ tracely.init()  # reads TRACELY_API_KEY from env`;
               </button>
             )}
           </div>
-          <CodeBlock code={installSnippet} language="shell" />
+          {hasAnyKey ? (
+            <CodeBlock code={installSnippet} language="shell" />
+          ) : (
+            <div className="flex justify-center rounded-lg border bg-muted/50 p-4">
+              <button
+                onClick={generateKey}
+                disabled={regenerating}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                <RefreshCw className={cn("size-3.5", regenerating && "animate-spin")} />
+                {regenerating ? "Generating..." : "Generate API key"}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -236,10 +267,7 @@ const TIME_PRESETS: { key: TimeRangePreset; label: string }[] = [
   { key: "custom", label: "Custom" },
 ];
 
-// --- Health Metrics Helpers ---
-
-// Time window for real-time metrics calculation (30 seconds)
-const REALTIME_WINDOW_MS = 30_000;
+// --- Header metrics helpers ---
 
 function formatMetricValue(value: number, decimals = 1): string {
   if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
@@ -247,93 +275,89 @@ function formatMetricValue(value: number, decimals = 1): string {
   return value.toFixed(decimals);
 }
 
+function errorRateColorClass(rate: number): string {
+  if (rate >= 5) return "text-destructive";
+  if (rate >= 1) return "text-warning";
+  return "text-success";
+}
+
+function p95ColorClass(ms: number): string {
+  if (ms >= 2000) return "text-destructive";
+  if (ms >= 500) return "text-warning";
+  return "text-success";
+}
+
+function formatP95(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
+
 // --- Live Header (40px, AC1 UX12, Story 11.2, Story 4.1 Health) ---
 
-function LiveHeader({
+const LiveHeader = memo(function LiveHeader({
+  orgSlug,
+  projectSlug,
   status,
-  spanCount,
   isHistorical,
   onTimePreset,
-  onCustomStart,
-  onCustomEnd,
+  onCustomRangeChange,
 }: {
+  orgSlug: string;
+  projectSlug: string;
   status: "connecting" | "connected" | "disconnected";
-  spanCount: number;
   isHistorical?: boolean;
   onTimePreset: (preset: TimeRangePreset) => void;
-  onCustomStart: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onCustomEnd: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onCustomRangeChange: (start: string, end: string) => void;
 }) {
   const filters = useFilterStore((s) => s.filters);
+  const setEndpointSearch = useFilterStore((s) => s.setEndpointSearch);
+  const toggleStatusGroup = useFilterStore((s) => s.toggleStatusGroup);
   const [searchExpanded, setSearchExpanded] = useState(false);
 
-  // Real-time metrics from live span stream (instant reactivity)
   const spans = useLiveStreamStore((s) => s.spans);
-  const childrenMap = useLiveStreamStore((s) => s.childrenMap);
+  const spanCount = useMemo(
+    () => spans.filter((s) => matchesFilters(s, filters)).length,
+    [spans, filters]
+  );
 
-  // State-based current time for pure useMemo computation
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(Date.now()), 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const { data: healthData, isLoading: healthLoading } = useHealthData({
+    orgSlug,
+    projectSlug,
+    enabled: !isHistorical,
+  });
 
-  // Compute real-time metrics from recent spans
-  const aggregatedMetrics = useMemo(() => {
-    const cutoff = currentTime - REALTIME_WINDOW_MS;
+  const aggregatedMetrics = useMemo(
+    () => aggregateProjectHealthMetrics(healthData?.services ?? []),
+    [healthData]
+  );
 
-    // Collect all completed spans from the time window
-    const allSpans = [
-      ...spans,
-      ...Object.values(childrenMap).flat(),
-    ].filter((s) => {
-      if (s.span_type === "pending_span") return false;
-      const spanTime = new Date(s.start_time).getTime();
-      return spanTime >= cutoff;
-    });
-
-    // Need at least a few spans to show metrics
-    if (allSpans.length < 1) return null;
-
-    // Calculate request rate (spans per minute based on window)
-    const windowMinutes = REALTIME_WINDOW_MS / 60_000;
-    const totalRequestRate = allSpans.length / windowMinutes;
-
-    // Calculate error rate
-    const errorCount = allSpans.filter((s) => s.http_status_code >= 400).length;
-    const avgErrorRate = (errorCount / allSpans.length) * 100;
-
-    // Calculate p95 latency
-    const durations = allSpans
-      .map((s) => s.duration_ms)
-      .filter((d) => d > 0)
-      .sort((a, b) => a - b);
-
-    let maxP95 = 0;
-    if (durations.length > 0) {
-      const p95Index = Math.floor(durations.length * 0.95);
-      maxP95 = durations[Math.min(p95Index, durations.length - 1)];
-    }
-
-    return { totalRequestRate, avgErrorRate, maxP95 };
-  }, [spans, childrenMap, currentTime]);
-
-  // Metrics are always ready when we have spans (no loading state needed)
-  const healthLoading = false;
+  // Custom range with only one bound picked — historical mode won't activate yet (AC5)
+  const isCustomRangeIncomplete =
+    filters.timeRange.preset === "custom" &&
+    !!filters.timeRange.start !== !!filters.timeRange.end;
 
   return (
     <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
-      {/* Search input (non-functional, AC1) */}
-      <div className="hidden md:block">
+      {/* Search input (AC1) */}
+      <div className="hidden md:block shrink-0">
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search with filters..."
-            readOnly
-            className="h-7 min-w-[250px] max-w-[400px] rounded-md border bg-background pl-8 pr-3 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            placeholder="Search endpoint path..."
+            value={filters.endpointSearch}
+            onChange={(e) => setEndpointSearch(e.target.value)}
+            className="h-7 min-w-[250px] max-w-[400px] rounded-md border bg-background pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
             data-testid="header-search"
           />
+          {filters.endpointSearch !== "" && (
+            <button
+              onClick={() => setEndpointSearch("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
       </div>
       {/* Mobile: search icon button */}
@@ -349,13 +373,25 @@ function LiveHeader({
       {searchExpanded && (
         <div className="absolute left-0 top-10 z-20 flex w-full items-center gap-2 border-b bg-background px-4 py-2 md:hidden">
           <Search className="size-3.5 shrink-0 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search with filters..."
-            readOnly
-            autoFocus
-            className="h-7 flex-1 rounded-md border bg-background px-3 text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:outline-none"
-          />
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search endpoint path..."
+              value={filters.endpointSearch}
+              onChange={(e) => setEndpointSearch(e.target.value)}
+              autoFocus
+              className="h-7 w-full rounded-md border bg-background px-3 pr-7 text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            />
+            {filters.endpointSearch !== "" && (
+              <button
+                onClick={() => setEndpointSearch("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
           <button
             onClick={() => setSearchExpanded(false)}
             className="text-xs text-muted-foreground hover:text-foreground"
@@ -366,7 +402,7 @@ function LiveHeader({
       )}
 
       {/* Time preset select (moved to left side) */}
-      <div className="relative" data-testid="header-time-range">
+      <div className="relative shrink-0" data-testid="header-time-range">
         <select
           value={filters.timeRange.preset}
           onChange={(e) => onTimePreset(e.target.value as TimeRangePreset)}
@@ -381,29 +417,64 @@ function LiveHeader({
         <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
       </div>
 
-      {/* Custom time range inputs */}
+      {/* Custom time range picker */}
       {filters.timeRange.preset === "custom" && (
-        <div className="flex items-center gap-1" data-testid="header-custom-range">
-          <input
-            type="datetime-local"
-            onChange={onCustomStart}
-            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-            data-testid="header-custom-start"
+        <div data-testid="header-custom-range">
+          <DateRangePicker
+            start={filters.timeRange.start}
+            end={filters.timeRange.end}
+            onApply={onCustomRangeChange}
           />
-          <span className="text-xs text-muted-foreground">to</span>
-          <input
-            type="datetime-local"
-            onChange={onCustomEnd}
-            className="h-7 rounded-md border bg-background px-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-            data-testid="header-custom-end"
-          />
+          {isCustomRangeIncomplete && (
+            <div
+              className="absolute left-0 top-10 z-20 w-full border-b bg-warning/10 px-4 py-1 text-xs text-warning"
+              data-testid="header-custom-range-hint"
+            >
+              Pick a start and end date to view historical data.
+            </div>
+          )}
         </div>
       )}
+
+      {/* Status code filters — 4xx and 5xx toggle independently (AC1). Hidden
+          below sm: at phone widths there isn't room next to the connection
+          status without overflowing the row. */}
+      <div className="hidden shrink-0 items-center gap-1 sm:flex">
+        <AlertTriangle className="size-3.5 text-muted-foreground" />
+        <button
+          type="button"
+          onClick={() => toggleStatusGroup("4xx")}
+          className={cn(
+            "inline-flex h-7 items-center rounded-md border px-2 text-xs transition-colors",
+            filters.statusGroups.includes("4xx")
+              ? "border-warning/40 bg-warning/10 text-warning hover:bg-warning/15"
+              : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+          )}
+          data-testid="header-4xx-only"
+          title="Show 4xx errors from the full selected period"
+        >
+          4xx
+        </button>
+        <button
+          type="button"
+          onClick={() => toggleStatusGroup("5xx")}
+          className={cn(
+            "inline-flex h-7 items-center rounded-md border px-2 text-xs transition-colors",
+            filters.statusGroups.includes("5xx")
+              ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15"
+              : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground"
+          )}
+          data-testid="header-5xx-only"
+          title="Show 5xx errors from the full selected period"
+        >
+          5xx
+        </button>
+      </div>
 
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Metrics row (Story 4.1) */}
+      {/* Metrics row (Story 4.1) — full row on wide screens */}
       {aggregatedMetrics && !healthLoading && (
         <div className="hidden lg:flex items-center gap-3 text-xs" data-testid="header-metrics">
           <div className="flex items-center gap-1.5">
@@ -412,77 +483,102 @@ function LiveHeader({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground">error</span>
-            <span className={cn(
-              "font-medium tabular-nums",
-              aggregatedMetrics.avgErrorRate >= 5 ? "text-red-500" :
-              aggregatedMetrics.avgErrorRate >= 1 ? "text-amber-500" : "text-emerald-500"
-            )}>
+            <span className={cn("font-medium tabular-nums", errorRateColorClass(aggregatedMetrics.avgErrorRate))}>
               {aggregatedMetrics.avgErrorRate.toFixed(1)}%
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground">p95</span>
-            <span className={cn(
-              "font-medium tabular-nums",
-              aggregatedMetrics.maxP95 >= 2000 ? "text-red-500" :
-              aggregatedMetrics.maxP95 >= 500 ? "text-amber-500" : "text-emerald-500"
-            )}>
-              {aggregatedMetrics.maxP95 >= 1000
-                ? `${(aggregatedMetrics.maxP95 / 1000).toFixed(1)}s`
-                : `${Math.round(aggregatedMetrics.maxP95)}ms`}
+            <span className={cn("font-medium tabular-nums", p95ColorClass(aggregatedMetrics.maxP95))}>
+              {formatP95(aggregatedMetrics.maxP95)}
             </span>
           </div>
         </div>
       )}
 
-      <div className="mx-1 h-4 w-px bg-border" />
+      {/* Compact metrics fallback — error rate + p95 only, sm through lg (UX10).
+          Hidden below sm along with the status filters to keep the phone
+          baseline down to search / time-range / connection status. */}
+      {aggregatedMetrics && !healthLoading && (
+        <div className="hidden sm:flex lg:hidden shrink-0 items-center gap-1 text-xs" data-testid="header-metrics-compact">
+          <span className={cn("font-medium tabular-nums", errorRateColorClass(aggregatedMetrics.avgErrorRate))}>
+            {aggregatedMetrics.avgErrorRate.toFixed(1)}%
+          </span>
+          <span className="text-muted-foreground">·</span>
+          <span className={cn("font-medium tabular-nums", p95ColorClass(aggregatedMetrics.maxP95))}>
+            {formatP95(aggregatedMetrics.maxP95)}
+          </span>
+        </div>
+      )}
+
+      <div className="mx-1 h-4 w-px shrink-0 bg-border" />
 
       {/* Connection status */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         {isHistorical ? (
           <>
-            <Clock className="size-3.5 text-violet-500" />
-            <span className="text-xs text-violet-600">Historical</span>
+            <Clock className="size-3.5 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Historical</span>
           </>
         ) : status === "connected" ? (
           <>
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
             </span>
-            <Wifi className="size-3.5 text-emerald-500" />
-            <span className="text-xs text-emerald-600">Live</span>
+            <Wifi className="size-3.5 text-success" />
+            <span className="text-xs text-success">Live</span>
           </>
         ) : status === "connecting" ? (
           <>
-            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-            <Wifi className="size-3.5 text-amber-500" />
-            <span className="text-xs text-amber-600">Connecting...</span>
+            <span className="h-2 w-2 animate-pulse rounded-full bg-warning" />
+            <Wifi className="size-3.5 text-warning" />
+            <span className="text-xs text-warning">Connecting...</span>
           </>
         ) : (
           <>
-            <span className="h-2 w-2 rounded-full bg-red-400" />
-            <WifiOff className="size-3.5 text-red-500" />
-            <span className="text-xs text-red-600">Disconnected</span>
+            <span className="h-2 w-2 rounded-full bg-destructive" />
+            <WifiOff className="size-3.5 text-destructive" />
+            <span className="text-xs text-destructive">Disconnected</span>
           </>
         )}
       </div>
 
-      {/* Request count */}
-      <span className="text-xs text-muted-foreground tabular-nums" data-testid="header-span-count">
+      {/* Request count — hidden below sm; connection status already conveys
+          activity at phone widths and there's no room left in the row. */}
+      <span className="hidden sm:inline text-xs text-muted-foreground tabular-nums shrink-0" data-testid="header-span-count">
         {spanCount > 0 && `${spanCount.toLocaleString()} requests`}
       </span>
     </div>
   );
+});
+
+/** Syncs available environment options from the live span buffer. */
+function EnvironmentSync() {
+  const spans = useLiveStreamStore((s) => s.spans);
+  const setAvailableEnvironments = useFilterStore((s) => s.setAvailableEnvironments);
+
+  useEffect(() => {
+    const envs = [...new Set(spans.map((s) => s.environment).filter(Boolean))].sort();
+    setAvailableEnvironments(envs.length > 0 ? envs : ["unknown"]);
+  }, [spans, setAvailableEnvironments]);
+
+  return null;
 }
 
 // --- Main Pulse View Page ---
 
-export default function LivePageClient() {
+export default function LivePageClient({
+  orgSlug,
+  projectSlug,
+  projectId,
+  initialSpans,
+  initialHasMoreHistory,
+}: LivePageClientProps) {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+        <div className="flex flex-col" style={{ height: "calc(100dvh - 48px)" }}>
           <div className="sticky top-0 z-10 flex h-10 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-sm">
             <div className="flex-1" />
             <span className="text-xs text-muted-foreground">Loading...</span>
@@ -491,47 +587,72 @@ export default function LivePageClient() {
         </div>
       }
     >
-      <LivePageInner />
+      <LivePageInner
+        orgSlug={orgSlug}
+        projectSlug={projectSlug}
+        projectId={projectId}
+        initialSpans={initialSpans}
+        initialHasMoreHistory={initialHasMoreHistory}
+      />
     </Suspense>
   );
 }
 
-function LivePageInner() {
-  const params = useParams<{ orgSlug: string; projectSlug: string }>();
-  const { orgSlug, projectSlug } = params;
+function LivePageInner({
+  orgSlug,
+  projectSlug,
+  projectId: serverProjectId,
+  initialSpans,
+  initialHasMoreHistory,
+}: LivePageClientProps) {
 
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [projectId, setProjectId] = useState<string | null>(serverProjectId);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
-  const spans = useLiveStreamStore((s) => s.spans);
-  const childrenMap = useLiveStreamStore((s) => s.childrenMap);
-  const expandedSpanIds = useLiveStreamStore((s) => s.expandedSpanIds);
-  const isAtBottom = useLiveStreamStore((s) => s.isAtBottom);
-  const isLoadingHistory = useLiveStreamStore((s) => s.isLoadingHistory);
-  const hasMoreHistory = useLiveStreamStore((s) => s.hasMoreHistory);
+  // Keep in sync when navigating between projects (new server props)
+  useEffect(() => {
+    setProjectId(serverProjectId);
+  }, [serverProjectId]);
+
+  // Client fallback when SSR prefetch could not resolve the project
+  useEffect(() => {
+    if (projectId) return;
+
+    let cancelled = false;
+    async function loadProject() {
+      try {
+        const res = await apiFetch<DataEnvelope<ProjectInfo>>(
+          `/api/orgs/${orgSlug}/projects/${projectSlug}`
+        );
+        if (!cancelled) setProjectId(res.data.id);
+      } catch {
+        // Non-blocking — SSE won't connect without project ID
+      }
+    }
+
+    loadProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, orgSlug, projectSlug]);
+
   const addSpan = useLiveStreamStore((s) => s.addSpan);
   const prependSpans = useLiveStreamStore((s) => s.prependSpans);
-  const toggleExpanded = useLiveStreamStore((s) => s.toggleExpanded);
-  const setIsAtBottom = useLiveStreamStore((s) => s.setIsAtBottom);
   const setLoadingHistory = useLiveStreamStore((s) => s.setLoadingHistory);
   const setHasMoreHistory = useLiveStreamStore((s) => s.setHasMoreHistory);
+  const hasMoreHistory = useLiveStreamStore((s) => s.hasMoreHistory);
+  const spanCount = useLiveStreamStore((s) => s.spans.length);
   const reset = useLiveStreamStore((s) => s.reset);
+
+  const projectHasDataRef = useRef(initialSpans.length > 0);
+  if (spanCount > 0) {
+    projectHasDataRef.current = true;
+  }
+  const projectHasData = projectHasDataRef.current;
 
   // --- Filter state (Story 3.5, 11.2) ---
   const filters = useFilterStore((s) => s.filters);
   const setTimeRange = useFilterStore((s) => s.setTimeRange);
-
-  // Extract unique environments from span buffer (Task 5) and sync to store
-  const setAvailableEnvironments = useFilterStore((s) => s.setAvailableEnvironments);
-  const environments = useMemo(() => {
-    const envs = [...new Set(spans.map((s) => s.environment).filter(Boolean))].sort();
-    return envs.length > 0 ? envs : ["unknown"];
-  }, [spans]);
-
-  useEffect(() => {
-    setAvailableEnvironments(environments);
-  }, [environments, setAvailableEnvironments]);
 
   // Timeframe handling (migrated from FilterBar)
   const handleTimePreset = useCallback(
@@ -545,57 +666,12 @@ function LivePageInner() {
     [setTimeRange]
   );
 
-  const handleCustomStart = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const iso = e.target.value ? new Date(e.target.value).toISOString() : undefined;
-      setTimeRange({ preset: "custom", start: iso, end: filters.timeRange.end });
+  const handleCustomRangeChange = useCallback(
+    (start: string, end: string) => {
+      setTimeRange({ preset: "custom", start, end });
     },
-    [setTimeRange, filters.timeRange.end]
+    [setTimeRange]
   );
-
-  const handleCustomEnd = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const iso = e.target.value ? new Date(e.target.value).toISOString() : undefined;
-      setTimeRange({ preset: "custom", start: filters.timeRange.start, end: iso });
-    },
-    [setTimeRange, filters.timeRange.start]
-  );
-
-  // Filter root spans only (children inherit parent visibility)
-  const filteredRootSpans = useMemo(
-    () => spans.filter((s) => matchesFilters(s, filters)),
-    [spans, filters]
-  );
-
-  // Build flat display list: root spans + expanded children
-  const expandedSet = useMemo(() => new Set(expandedSpanIds), [expandedSpanIds]);
-
-  const displayList: DisplayItem[] = useMemo(() => {
-    const items: DisplayItem[] = [];
-    for (const root of filteredRootSpans) {
-      const children = childrenMap[root.span_id] ?? [];
-      // Total count = the request itself + its children
-      const totalCount = 1 + children.length;
-      const hasErrorChildren = children.some((c) => c.http_status_code >= 400);
-      const isExpanded = expandedSet.has(root.span_id);
-
-      items.push({ type: "root", span: root, childCount: totalCount, hasErrorChildren, isExpanded });
-
-      if (isExpanded) {
-        // First child row = the parent request itself
-        const allRows = [root, ...children];
-        for (let i = 0; i < allRows.length; i++) {
-          const span = allRows[i];
-          const subChildren = childrenMap[span.span_id] ?? [];
-          items.push({ type: "child", span, depth: 1, childCount: subChildren.length, isLast: i === allRows.length - 1 });
-        }
-      }
-    }
-    return items;
-  }, [filteredRootSpans, childrenMap, expandedSet]);
-
-  // Backward-compatible alias used by existing code (auto-scroll, counts, empty state)
-  const filteredSpans = filteredRootSpans;
 
   // Historical mode: custom time range with both start and end set (AC5)
   const isHistoricalMode =
@@ -617,6 +693,10 @@ function LivePageInner() {
     const start = searchParams.get("start");
     const end = searchParams.get("end");
     const env = searchParams.get("env");
+    const status = searchParams.get("status");
+    const search = searchParams.get("search");
+    const service = searchParams.get("service");
+    const errors = searchParams.get("errors"); // legacy param, kept for old shared links
 
     const store = useFilterStore.getState();
     if (time) {
@@ -629,7 +709,22 @@ function LivePageInner() {
         });
       }
     }
-    if (env) store.setEnvironment(env);
+    if (env && env !== "unknown") store.setEnvironment(env);
+    if (search) store.setEndpointSearch(search);
+    if (service) store.setService(service);
+    if (status) {
+      const validGroups = new Set(["2xx", "3xx", "4xx", "5xx"]);
+      const groups = status.split(",").filter((g) => validGroups.has(g));
+      if (groups.length > 0) {
+        useFilterStore.setState((state) => ({
+          filters: { ...state.filters, statusGroups: groups as StreamFilters["statusGroups"] },
+        }));
+      }
+    } else if (errors === "1") {
+      useFilterStore.setState((state) => ({
+        filters: { ...state.filters, statusGroups: ["4xx", "5xx"] },
+      }));
+    }
   }, [searchParams]);
 
   // Sync filters to URL search params
@@ -638,7 +733,12 @@ function LivePageInner() {
     if (filters.timeRange.preset !== "5m") params.set("time", filters.timeRange.preset);
     if (filters.timeRange.start) params.set("start", filters.timeRange.start);
     if (filters.timeRange.end) params.set("end", filters.timeRange.end);
-    if (filters.environment) params.set("env", filters.environment);
+    if (filters.environment && filters.environment !== "unknown") {
+      params.set("env", filters.environment);
+    }
+    if (filters.endpointSearch) params.set("search", filters.endpointSearch);
+    if (filters.service) params.set("service", filters.service);
+    if (filters.statusGroups.length > 0) params.set("status", filters.statusGroups.join(","));
 
     const search = params.toString();
     const newUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
@@ -655,17 +755,11 @@ function LivePageInner() {
     }
   }, [orgSlug, projectSlug, filterReset]);
 
-  // --- Selection & Inspector state (Story 3.3 + 3.6) ---
-  // highlightedSpanId: keyboard/click highlight (J/K navigation, AC2)
-  // inspectorSpanId: which span has its inspector open (Enter to open, Escape to close)
-  const [highlightedSpanId, setHighlightedSpanId] = useState<string | null>(null);
+  // --- Inspector state (Story 3.3) ---
   const [inspectorSpanId, setInspectorSpanId] = useState<string | null>(null);
   const inspectorOpen = inspectorSpanId !== null;
   const { detail: spanDetail, loading: detailLoading, error: detailError } =
     useSpanDetail(orgSlug, projectSlug, inspectorSpanId);
-
-  // The "active" span for row highlighting is either the highlighted span or the inspector span
-  const activeSpanId = highlightedSpanId ?? inspectorSpanId;
 
   // --- Resizable inspector panel ---
   const [inspectorWidth, setInspectorWidth] = useState(40); // default 40%
@@ -701,84 +795,49 @@ function LivePageInner() {
     document.body.style.userSelect = "none";
   }
 
-  // Ref for returning focus to the stream list (AC4, UX3)
   const listContainerRef = useRef<HTMLDivElement>(null);
 
-  // Click handler: highlight + open inspector (preserves existing behavior)
-  const handleRowClick = useCallback((spanId: string) => {
-    setHighlightedSpanId(spanId);
+  const handleOpenInspector = useCallback((spanId: string) => {
     setInspectorSpanId(spanId);
   }, []);
 
-  // --- Keyboard Navigation (Story 3.6, AC2/AC3/AC4, UX3) ---
+  const handleCloseInspector = useCallback(() => {
+    setInspectorSpanId(null);
+  }, []);
 
-  // Compute selected index from highlighted span for keyboard navigation
-  const selectedIndex = useMemo(() => {
-    if (!highlightedSpanId) return -1;
-    return filteredSpans.findIndex((s) => s.span_id === highlightedSpanId);
-  }, [highlightedSpanId, filteredSpans]);
+  // Bootstrap store from server-prefetched spans (or re-bootstrap on project change)
+  const initialSpansKey = useMemo(
+    () => initialSpans.map((s) => s.span_id).join("\0"),
+    [initialSpans]
+  );
 
-  // J / ArrowDown — move selection down (AC2)
-  const moveDown = useCallback(() => {
-    if (filteredSpans.length === 0) return;
-    const nextIndex = selectedIndex === -1 ? 0 : Math.min(selectedIndex + 1, filteredSpans.length - 1);
-    setHighlightedSpanId(filteredSpans[nextIndex].span_id);
-  }, [filteredSpans, selectedIndex]);
+  useLayoutEffect(() => {
+    if (!serverProjectId) return;
 
-  // K / ArrowUp — move selection up (AC2)
-  const moveUp = useCallback(() => {
-    if (filteredSpans.length === 0) return;
-    const nextIndex = selectedIndex === -1 ? filteredSpans.length - 1 : Math.max(selectedIndex - 1, 0);
-    setHighlightedSpanId(filteredSpans[nextIndex].span_id);
-  }, [filteredSpans, selectedIndex]);
-
-  useKeyboardShortcut("j", moveDown);
-  useKeyboardShortcut("ArrowDown", moveDown);
-  useKeyboardShortcut("k", moveUp);
-  useKeyboardShortcut("ArrowUp", moveUp);
-
-  // Enter — open inspector for highlighted span (AC3)
-  useKeyboardShortcut("Enter", useCallback(() => {
-    if (highlightedSpanId) {
-      setInspectorSpanId(highlightedSpanId);
+    reset();
+    if (initialSpans.length > 0) {
+      projectHasDataRef.current = true;
+      prependSpans(initialSpans);
+      setHasMoreHistory(initialHasMoreHistory);
+      setInitialLoadDone(true);
     }
-  }, [highlightedSpanId]));
+  }, [
+    orgSlug,
+    projectSlug,
+    serverProjectId,
+    initialSpansKey,
+    initialHasMoreHistory,
+    reset,
+    prependSpans,
+    setHasMoreHistory,
+  ]);
 
-  // Escape — close inspector and return focus to list (AC4, UX3)
-  useKeyboardShortcut("Escape", useCallback(() => {
-    if (inspectorOpen) {
-      setInspectorSpanId(null);
-      listContainerRef.current?.focus();
-    }
-  }, [inspectorOpen]), { allowInInputs: true });
-
-  // Fetch project UUID for SSE endpoint
-  useEffect(() => {
-    let cancelled = false;
-    async function loadProject() {
-      try {
-        const res = await apiFetch<DataEnvelope<ProjectInfo>>(
-          `/api/orgs/${orgSlug}/projects/${projectSlug}`
-        );
-        if (!cancelled) setProjectId(res.data.id);
-      } catch {
-        // Non-blocking — SSE won't connect without project ID
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    loadProject();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgSlug, projectSlug]);
-
-  // Reset store on unmount
+  // Reset store on unmount only (not in bootstrap cleanup — breaks React Strict Mode)
   useEffect(() => {
     return () => reset();
   }, [reset]);
 
-  // Load recent spans on initial page load so the list isn't empty
+  // Client spans fetch when SSR had no spans or prefetch failed
   useEffect(() => {
     if (!projectId || initialLoadDone || isHistoricalMode) return;
 
@@ -788,16 +847,14 @@ function LivePageInner() {
         const url = `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50`;
         const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
         if (cancelled) return;
+
+        reset();
         const fetched = res.data;
-
         if (fetched.length > 0) {
-          const chronological = [...fetched].reverse();
-          prependSpans(chronological);
-
+          projectHasDataRef.current = true;
+          prependSpans([...fetched].reverse());
           const meta = res.meta as { has_more?: boolean };
-          if (!meta.has_more) {
-            setHasMoreHistory(false);
-          }
+          setHasMoreHistory(meta.has_more !== false);
         } else {
           setHasMoreHistory(false);
         }
@@ -809,8 +866,19 @@ function LivePageInner() {
     }
 
     loadInitial();
-    return () => { cancelled = true; };
-  }, [projectId, initialLoadDone, isHistoricalMode, orgSlug, projectSlug, prependSpans, setHasMoreHistory]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    projectId,
+    initialLoadDone,
+    isHistoricalMode,
+    orgSlug,
+    projectSlug,
+    reset,
+    prependSpans,
+    setHasMoreHistory,
+  ]);
 
   // Live stream announcement for screen readers (AC6, UX11)
   const [liveAnnouncement, setLiveAnnouncement] = useState("");
@@ -819,6 +887,7 @@ function LivePageInner() {
   const handleSpan = useCallback(
     (data: Record<string, unknown>) => {
       const span = data as unknown as SpanEvent;
+      projectHasDataRef.current = true;
       addSpan(span);
       // Announce new span for screen readers
       if (span.span_type !== "pending_span") {
@@ -838,14 +907,109 @@ function LivePageInner() {
 
   // --- History loading (AC1) ---
   const fetchingRef = useRef(false);
+  const pendingWindowFetchRef = useRef<{ replace: boolean } | null>(null);
   const scrollAdjustRef = useRef(0);
+  // Set right before a history prepend, cleared after the next auto-scroll
+  // check — prevents a history load (triggered by scrolling up) from ever
+  // being mistaken for new live data and snapping the view back to the bottom.
+  const isHistoryPrependRef = useRef(false);
 
-  /** Build filter query params for server-side filtering in historical mode. */
-  const buildFilterParams = useCallback(() => {
-    const params: string[] = [];
-    if (filters.environment) params.push(`environment=${encodeURIComponent(filters.environment)}`);
-    return params.length > 0 ? `&${params.join("&")}` : "";
-  }, [filters.environment]);
+  // Debounce endpointSearch before server-side refetch — matchesFilters still
+  // applies the raw value instantly to the already-loaded buffer.
+  const [debouncedSearch, setDebouncedSearch] = useState(filters.endpointSearch);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(filters.endpointSearch), 400);
+    return () => clearTimeout(timer);
+  }, [filters.endpointSearch]);
+
+  /** Build filter query params for server-side filtering. */
+  const buildFilterParams = useCallback(
+    (endpointSearch = filters.endpointSearch) => {
+      const params: string[] = [];
+      if (filters.environment) {
+        params.push(`environment=${encodeURIComponent(filters.environment)}`);
+      }
+      if (filters.statusGroups.length > 0) {
+        params.push(`status_groups=${encodeURIComponent(filters.statusGroups.join(","))}`);
+      }
+      if (endpointSearch) {
+        params.push(`endpoint_search=${encodeURIComponent(endpointSearch)}`);
+      }
+      return params.length > 0 ? `&${params.join("&")}` : "";
+    },
+    [filters.environment, filters.statusGroups, filters.endpointSearch]
+  );
+
+  const getActiveWindowAfter = useCallback(() => {
+    if (filters.timeRange.preset === "custom" && filters.timeRange.start) {
+      return filters.timeRange.start;
+    }
+    return new Date(Date.now() - presetToMs(filters.timeRange.preset)).toISOString();
+  }, [filters.timeRange.preset, filters.timeRange.start]);
+
+  /** Fetch spans for the active time window (optionally replacing the buffer). */
+  const fetchActiveWindow = useCallback(
+    async ({ replace }: { replace: boolean }) => {
+      if (!projectId) return;
+      if (fetchingRef.current) {
+        pendingWindowFetchRef.current = { replace };
+        return;
+      }
+      fetchingRef.current = true;
+      setLoadingHistory(true);
+
+      try {
+        let url =
+          `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=150` +
+          `&after=${encodeURIComponent(getActiveWindowAfter())}`;
+
+        if (filters.timeRange.preset === "custom" && filters.timeRange.end) {
+          url += `&before=${encodeURIComponent(filters.timeRange.end)}`;
+        }
+        url += buildFilterParams(debouncedSearch);
+
+        if (replace) {
+          reset();
+          setHasMoreHistory(true);
+        }
+
+        const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
+        const fetched = res.data;
+
+        if (fetched.length === 0) {
+          if (replace) setHasMoreHistory(false);
+        } else {
+          projectHasDataRef.current = true;
+          if (!replace) isHistoryPrependRef.current = true;
+          prependSpans([...fetched].reverse());
+          const meta = res.meta as { has_more?: boolean };
+          setHasMoreHistory(meta.has_more !== false);
+        }
+      } catch {
+        // Non-blocking — buffer stays as-is
+      } finally {
+        setLoadingHistory(false);
+        fetchingRef.current = false;
+        const pending = pendingWindowFetchRef.current;
+        if (pending) {
+          pendingWindowFetchRef.current = null;
+          void fetchActiveWindow(pending);
+        }
+      }
+    },
+    [
+      projectId,
+      orgSlug,
+      projectSlug,
+      getActiveWindowAfter,
+      buildFilterParams,
+      debouncedSearch,
+      reset,
+      prependSpans,
+      setHasMoreHistory,
+      setLoadingHistory,
+    ]
+  );
 
   const loadHistory = useCallback(async () => {
     if (fetchingRef.current || !projectId || !hasMoreHistory) return;
@@ -856,15 +1020,26 @@ function LivePageInner() {
     const oldest = currentSpans.length > 0 ? currentSpans[0].start_time : undefined;
 
     try {
+      // Larger page for "load more" than the initial view (150 vs 50) — fewer
+      // round trips needed while scrolling through history, paired with the
+      // predictive scroll trigger in StreamList so the fetch resolves before
+      // the user visually reaches the top.
       let url =
-        `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50` +
+        `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=150` +
         (oldest ? `&before=${encodeURIComponent(oldest)}` : "");
 
-      // In historical mode, bound the query to the custom range and apply server-side filters
-      if (isHistoricalMode) {
-        if (filters.timeRange.start) url += `&after=${encodeURIComponent(filters.timeRange.start)}`;
-        url += buildFilterParams();
-      }
+      // Bound the query to the active window — custom range uses its fixed
+      // start, presets use a sliding "now - preset" bound recomputed on every
+      // call (same treatment matchesFilters already gives presets). Without
+      // this, scrolling up in preset mode pulled in spans from arbitrarily
+      // far in the past and hasMoreHistory only went false once the entire
+      // project history was exhausted, not the selected window.
+      const activeAfter =
+        filters.timeRange.preset === "custom"
+          ? filters.timeRange.start
+          : new Date(Date.now() - presetToMs(filters.timeRange.preset)).toISOString();
+      if (activeAfter) url += `&after=${encodeURIComponent(activeAfter)}`;
+      url += buildFilterParams(debouncedSearch);
 
       const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
       const fetched = res.data;
@@ -874,10 +1049,13 @@ function LivePageInner() {
       } else {
         // API returns newest-first; reverse for chronological prepend
         const chronological = [...fetched].reverse();
-        // Only root spans affect scroll position (children are collapsed by default)
-        const rootCount = chronological.filter((s) => !s.parent_span_id || s.parent_span_id === "").length;
-        scrollAdjustRef.current = rootCount * ROW_HEIGHT;
-        prependSpans(chronological);
+        isHistoryPrependRef.current = true;
+        // Use the count of roots actually added (post-dedup) — the raw fetch
+        // count would overshoot the scroll compensation when the batch
+        // overlaps spans already in the store (e.g. a fast scroll racing the
+        // initial load), jumping the view forward instead of holding position.
+        const addedRootCount = prependSpans(chronological);
+        scrollAdjustRef.current = addedRootCount * ROW_HEIGHT;
 
         const meta = res.meta as { has_more?: boolean };
         if (!meta.has_more) {
@@ -890,13 +1068,27 @@ function LivePageInner() {
       setLoadingHistory(false);
       fetchingRef.current = false;
     }
-  }, [projectId, hasMoreHistory, orgSlug, projectSlug, prependSpans, setLoadingHistory, setHasMoreHistory, isHistoricalMode, filters.timeRange.start, buildFilterParams]);
+  }, [projectId, hasMoreHistory, orgSlug, projectSlug, prependSpans, setLoadingHistory, setHasMoreHistory, filters.timeRange.preset, filters.timeRange.start, buildFilterParams, debouncedSearch]);
 
   // --- Historical mode: initial fetch on entry (AC5) ---
   const prevHistoricalRef = useRef(false);
+  const prevRangeRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isHistoricalMode && !prevHistoricalRef.current && projectId) {
-      // Entering historical mode — reset store and fetch first page
+    const rangeKey = isHistoricalMode
+      ? [
+          filters.timeRange.start ?? "",
+          filters.timeRange.end ?? "",
+          filters.statusGroups.join(","),
+          filters.environment ?? "",
+          debouncedSearch,
+        ].join("|")
+      : null;
+    const enteringHistorical = isHistoricalMode && !prevHistoricalRef.current;
+    const rangeChanged =
+      isHistoricalMode && prevHistoricalRef.current && rangeKey !== prevRangeRef.current;
+
+    if (isHistoricalMode && (enteringHistorical || rangeChanged) && projectId) {
+      // Entering historical mode, or the custom range changed — reset store and fetch first page
       reset();
       setHasMoreHistory(true);
 
@@ -906,10 +1098,10 @@ function LivePageInner() {
 
         try {
           const url =
-            `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50` +
+            `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=150` +
             `&after=${encodeURIComponent(filters.timeRange.start!)}` +
             `&before=${encodeURIComponent(filters.timeRange.end!)}` +
-            buildFilterParams();
+            buildFilterParams(debouncedSearch);
 
           const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
           const fetched = res.data;
@@ -936,246 +1128,149 @@ function LivePageInner() {
 
       fetchInitialPage();
     } else if (!isHistoricalMode && prevHistoricalRef.current) {
-      // Leaving historical mode — reset store (SSE will auto-reconnect)
+      // Leaving historical mode — reset store and re-fetch recent spans
+      // (SSE reconnects on its own, but that only delivers *new* events).
       reset();
       setHasMoreHistory(true);
+      setInitialLoadDone(false);
+
+      async function fetchLiveSpans() {
+        try {
+          const url = `/api/orgs/${orgSlug}/projects/${projectSlug}/spans?limit=50`;
+          const res = await apiFetch<DataEnvelope<SpanEvent[]>>(url);
+          const fetched = res.data;
+
+          if (fetched.length > 0) {
+            prependSpans([...fetched].reverse());
+            const meta = res.meta as { has_more?: boolean };
+            setHasMoreHistory(meta.has_more !== false);
+          } else {
+            setHasMoreHistory(false);
+          }
+        } catch {
+          // Non-blocking
+        } finally {
+          setInitialLoadDone(true);
+        }
+      }
+
+      fetchLiveSpans();
     }
     prevHistoricalRef.current = isHistoricalMode;
-  }, [isHistoricalMode, projectId, orgSlug, projectSlug, filters.timeRange.start, filters.timeRange.end, reset, prependSpans, setLoadingHistory, setHasMoreHistory, buildFilterParams]);
+    prevRangeRef.current = rangeKey;
+  }, [isHistoricalMode, projectId, orgSlug, projectSlug, filters.timeRange.start, filters.timeRange.end, filters.statusGroups, filters.environment, debouncedSearch, reset, prependSpans, setLoadingHistory, setHasMoreHistory, buildFilterParams]);
 
-  // --- TanStack Virtual ---
-  const parentRef = useRef<HTMLDivElement>(null);
-  const prevCountRef = useRef(0);
-
-  const virtualizer = useVirtualizer({
-    count: displayList.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 20,
-  });
-
-  // Adjust scroll position after history prepend to prevent jumping (AC1)
-  useLayoutEffect(() => {
-    if (scrollAdjustRef.current > 0 && parentRef.current) {
-      parentRef.current.scrollTop += scrollAdjustRef.current;
-      scrollAdjustRef.current = 0;
-    }
-  });
-
-  // Track scroll position to detect "at bottom" and "near top" for history loading
+  // Preset live mode: backfill or refetch the active window when the timeframe
+  // or server-side filters (4xx/5xx, env, search) change. Status filters only
+  // hid what was already in the client buffer — now we query ClickHouse for the
+  // full selected window with those filters applied.
+  const prevWindowFetchKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    const el = parentRef.current;
-    if (!el) return;
+    if (!projectId || !initialLoadDone || isHistoricalMode) return;
 
-    function handleScroll() {
-      if (!el) return;
-      const threshold = 50;
-      const atBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
-      setIsAtBottom(atBottom);
+    const windowKey = [
+      filters.timeRange.preset,
+      filters.timeRange.start ?? "",
+      filters.timeRange.end ?? "",
+      filters.statusGroups.join(","),
+      filters.environment ?? "",
+      debouncedSearch,
+    ].join("|");
 
-      // Trigger history loading when scrolled near top (AC1)
-      if (el.scrollTop < 100) {
-        loadHistory();
-      }
+    const hasServerFilters =
+      filters.statusGroups.length > 0 ||
+      filters.environment !== null ||
+      debouncedSearch !== "";
+
+    if (prevWindowFetchKeyRef.current === null) {
+      prevWindowFetchKeyRef.current = windowKey;
+      if (!hasServerFilters) return;
+    } else if (windowKey === prevWindowFetchKeyRef.current) {
+      return;
     }
 
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, [setIsAtBottom, loadHistory]);
+    const prevKey = prevWindowFetchKeyRef.current;
+    prevWindowFetchKeyRef.current = windowKey;
 
-  // Auto-scroll when at bottom and new spans arrive (AC2)
-  useEffect(() => {
-    if (isAtBottom && displayList.length > 0 && displayList.length > prevCountRef.current) {
-      virtualizer.scrollToIndex(displayList.length - 1, { align: "end" });
-    }
-    prevCountRef.current = displayList.length;
-  }, [displayList.length, isAtBottom, virtualizer]);
+    const [prevPreset, prevStart, prevEnd, prevStatus, prevEnv, prevSearch] =
+      prevKey.split("|");
+    const prevHadServerFilters = prevStatus !== "" || prevEnv !== "" || prevSearch !== "";
+    const onlyPresetChanged =
+      !hasServerFilters &&
+      !prevHadServerFilters &&
+      prevStatus === filters.statusGroups.join(",") &&
+      prevEnv === (filters.environment ?? "") &&
+      prevSearch === debouncedSearch &&
+      (prevPreset !== filters.timeRange.preset ||
+        prevStart !== (filters.timeRange.start ?? "") ||
+        prevEnd !== (filters.timeRange.end ?? ""));
 
-  // Auto-scroll selected row into view when keyboard-navigating (AC2, Story 3.6)
-  // Map root span index to displayList index (accounts for expanded children)
-  const selectedDisplayIndex = useMemo(() => {
-    if (!highlightedSpanId) return -1;
-    return displayList.findIndex(
-      (item) => item.type === "root" && item.span.span_id === highlightedSpanId
-    );
-  }, [highlightedSpanId, displayList]);
+    const shouldReplace =
+      hasServerFilters || prevHadServerFilters || !onlyPresetChanged;
 
-  useEffect(() => {
-    if (selectedDisplayIndex >= 0) {
-      virtualizer.scrollToIndex(selectedDisplayIndex, { align: "auto" });
-    }
-  }, [selectedDisplayIndex, virtualizer]);
+    void fetchActiveWindow({ replace: shouldReplace });
+  }, [
+    filters.timeRange.preset,
+    filters.timeRange.start,
+    filters.timeRange.end,
+    filters.statusGroups,
+    filters.environment,
+    debouncedSearch,
+    projectId,
+    initialLoadDone,
+    isHistoricalMode,
+    fetchActiveWindow,
+  ]);
 
-  // Back to Live handler (AC3)
-  function handleBackToLive() {
-    virtualizer.scrollToIndex(displayList.length - 1, { align: "end" });
-    setIsAtBottom(true);
-  }
-
-  // Determine what to show
-  const showSkeleton = loading || !initialLoadDone;
-  const showEmpty = !loading && initialLoadDone && spans.length === 0;
-  const showList = !loading && initialLoadDone && spans.length > 0;
-  const showNoResults = showList && filteredSpans.length === 0;
+  const emptyState = useMemo(
+    () => <EmptyState orgSlug={orgSlug} projectSlug={projectSlug} />,
+    [orgSlug, projectSlug]
+  );
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 48px)" }}>
+    <div className="flex flex-col" style={{ height: "calc(100dvh - 48px)" }}>
+      <EnvironmentSync />
       {/* Screen reader live region for new span announcements (AC6, UX11) */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </div>
       <LiveHeader
+        orgSlug={orgSlug}
+        projectSlug={projectSlug}
         status={status}
-        spanCount={filteredSpans.length}
         isHistorical={isHistoricalMode}
         onTimePreset={handleTimePreset}
-        onCustomStart={handleCustomStart}
-        onCustomEnd={handleCustomEnd}
+        onCustomRangeChange={handleCustomRangeChange}
       />
       <TimelineBar />
       <div ref={containerRef} className="relative flex flex-1 overflow-hidden">
-        {/* Stream list — compresses when inspector is open */}
         <div
-          className={cn(
-            inspectorOpen ? "hidden md:block" : "w-full"
-          )}
+          className={cn(inspectorOpen ? "hidden md:block" : "w-full")}
           style={{
             width: inspectorOpen ? `${100 - inspectorWidth}%` : "100%",
-            transition: "width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)"
+            transition: "width 0.25s cubic-bezier(0.25, 0.1, 0.25, 1)",
           }}
         >
-          <div className="relative h-full">
-            <div
-              ref={(el) => {
-                (parentRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                (listContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-              }}
-              tabIndex={-1}
-              role="list"
-              aria-label="Request stream"
-              className="h-full overflow-auto outline-none"
-            >
-              {showSkeleton && <PulseSkeleton />}
-              {showEmpty && <EmptyState orgSlug={orgSlug} projectSlug={projectSlug} />}
-              {showNoResults && (
-                <div className="flex h-full items-center justify-center">
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-muted-foreground">No matching requests</p>
-                    <p className="mt-1 text-xs text-muted-foreground/70">Try adjusting your filters</p>
-                  </div>
-                </div>
-              )}
-              {showList && !showNoResults && (
-                <div
-                  style={{
-                    height: `${virtualizer.getTotalSize()}px`,
-                    width: "100%",
-                    position: "relative",
-                  }}
-                >
-                  {/* History loading skeleton at top (AC1, UX7) */}
-                  {isLoadingHistory && (
-                    <div className="absolute left-0 top-0 z-10 w-full">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="flex items-center gap-3 border-b border-border/50 bg-background px-4 py-2"
-                        >
-                          <div className="h-5 w-14 animate-pulse rounded bg-muted" />
-                          <div
-                            className="h-4 animate-pulse rounded bg-muted"
-                            style={{ width: `${SKELETON_WIDTHS[i]}%` }}
-                          />
-                          <div className="ml-auto h-4 w-10 animate-pulse rounded bg-muted" />
-                          <div className="h-4 w-14 animate-pulse rounded bg-muted" />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const item = displayList[virtualRow.index];
-                    const isNew =
-                      virtualRow.index >= prevCountRef.current - 1 &&
-                      virtualRow.index === displayList.length - 1;
-
-                    const rowContent =
-                      item.type === "root" ? (
-                        <StreamRow
-                          span={item.span}
-                          isSelected={item.span.span_id === activeSpanId}
-                          childCount={item.childCount}
-                          hasErrorChildren={item.hasErrorChildren}
-                          isExpanded={item.isExpanded}
-                          onToggleExpand={() => toggleExpanded(item.span.span_id)}
-                          onClick={() => handleRowClick(item.span.span_id)}
-                        />
-                      ) : (
-                        <ChildSpanRow
-                          span={item.span}
-                          depth={item.depth}
-                          childCount={item.childCount}
-                          isLast={item.isLast}
-                          isSelected={item.span.span_id === activeSpanId}
-                          onClick={() => handleRowClick(item.span.span_id)}
-                        />
-                      );
-
-                    return (
-                      <div
-                        key={`${item.type}-${item.span.span_id}`}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          height: `${virtualRow.size}px`,
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        {isNew ? (
-                          <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                          >
-                            {rowContent}
-                          </motion.div>
-                        ) : (
-                          rowContent
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Back to Live floating button (AC2, AC3, UX17) */}
-            <AnimatePresence>
-              {!isAtBottom && filteredSpans.length > 0 && (
-                <motion.button
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.15 }}
-                  onClick={handleBackToLive}
-                  className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors"
-                >
-                  <ArrowDown className="size-4" />
-                  Back to Live
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
+          <StreamList
+            projectId={projectId}
+            initialLoadDone={initialLoadDone}
+            isHistoricalMode={isHistoricalMode}
+            projectHasData={projectHasData}
+            inspectorSpanId={inspectorSpanId}
+            onOpenInspector={handleOpenInspector}
+            onCloseInspector={handleCloseInspector}
+            listContainerRef={listContainerRef}
+            scrollAdjustRef={scrollAdjustRef}
+            isHistoryPrependRef={isHistoryPrependRef}
+            onLoadHistory={loadHistory}
+            emptyState={emptyState}
+          />
         </div>
 
         {/* Resize handle + Span Inspector panel */}
         <AnimatePresence>
           {inspectorOpen && (
             <>
-              {/* Drag handle */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -1198,7 +1293,7 @@ function LivePageInner() {
                   detail={spanDetail}
                   loading={detailLoading}
                   error={detailError}
-                  onClose={() => setInspectorSpanId(null)}
+                  onClose={handleCloseInspector}
                   orgSlug={orgSlug}
                   projectSlug={projectSlug}
                 />

@@ -10,7 +10,7 @@ export function getStatusCodeGroup(code: number): StatusCodeGroup | null {
 }
 
 /** Convert a time range preset to milliseconds. */
-function presetToMs(preset: TimeRangePreset): number {
+export function presetToMs(preset: TimeRangePreset): number {
   switch (preset) {
     case "5m": return 5 * 60 * 1000;
     case "15m": return 15 * 60 * 1000;
@@ -72,9 +72,12 @@ export function matchesFilters(span: SpanEvent, filters: StreamFilters): boolean
     }
   }
 
-  // Environment filter
-  if (filters.environment !== null && span.environment !== filters.environment) {
-    return false;
+  // Environment filter — empty SDK env is treated as "unknown"
+  if (filters.environment !== null) {
+    const spanEnv = span.environment || "unknown";
+    if (spanEnv !== filters.environment) {
+      return false;
+    }
   }
 
   return true;

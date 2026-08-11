@@ -4,8 +4,8 @@ import { formatDuration } from "@/lib/formatDuration";
 import type { SpanEvent } from "@/types/span";
 
 function statusColorClass(code: number): string {
-  if (code >= 200 && code < 300) return "text-emerald-500";
-  if (code >= 400) return "text-red-500";
+  if (code >= 200 && code < 300) return "text-success";
+  if (code >= 400) return "text-destructive";
   return "text-muted-foreground";
 }
 
@@ -50,22 +50,24 @@ export const ChildSpanRow = memo(function ChildSpanRow({
       aria-level={2}
       aria-label={ariaLabel}
       aria-selected={isSelected ?? false}
-      tabIndex={-1}
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && onClick) onClick();
+      }}
       className={cn(
-        "flex items-center gap-2 py-1.5 text-xs font-mono border-b border-border/30 cursor-pointer transition-colors hover:bg-accent/30",
-        hasError && "text-red-500",
+        "flex items-center gap-2 py-1.5 px-3 sm:px-4 text-xs font-mono border-b border-border/30 cursor-pointer transition-colors hover:bg-accent/30",
+        hasError && "text-destructive",
         isSelected && "bg-accent/50"
       )}
-      style={{ paddingLeft: "16px", paddingRight: "16px" }}
     >
       {/* Timestamp — fixed width (matches StreamRow) */}
-      <span className="shrink-0 w-[60px] text-muted-foreground/70 tabular-nums">
+      <span className="hidden sm:inline-flex shrink-0 w-[60px] text-muted-foreground/70 tabular-nums">
         {formatTimestamp(span.start_time)}
       </span>
 
       {/* Service name — fixed width (matches StreamRow) */}
-      <span className="shrink-0 w-20 text-muted-foreground/70 truncate" title={serviceName}>
+      <span className="hidden md:block shrink-0 w-20 text-muted-foreground/70 truncate" title={serviceName}>
         {serviceName}
       </span>
 
@@ -90,7 +92,7 @@ export const ChildSpanRow = memo(function ChildSpanRow({
       </span>
 
       {/* Operation name — flex */}
-      <span className={cn("min-w-0 flex-1 truncate", hasError ? "text-red-500" : "text-muted-foreground")}>
+      <span className={cn("min-w-0 flex-1 truncate", hasError ? "text-destructive" : "text-muted-foreground")}>
         {operationName}
       </span>
 

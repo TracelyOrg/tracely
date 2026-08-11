@@ -51,9 +51,9 @@ interface TeamTabProps {
 }
 
 const ROLE_BADGE: Record<string, string> = {
-  admin: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  member: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  viewer: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+  admin: "bg-warning/10 text-warning",
+  member: "bg-muted text-foreground",
+  viewer: "bg-muted/50 text-muted-foreground",
 };
 
 export default function TeamTab({ orgSlug, isAdmin, orgName }: TeamTabProps) {

@@ -163,39 +163,13 @@ describe("ServiceStatusWidget", () => {
     expect(screen.getByText("user-service")).toBeInTheDocument();
   });
 
-  it("displays healthy count in header", () => {
-    render(
-      <ServiceStatusWidget
-        services={[
-          makeServiceStatus({ name: "service-1", status: "healthy" }),
-          makeServiceStatus({ name: "service-2", status: "healthy" }),
-        ]}
-      />
-    );
-    expect(screen.getByText("2 healthy")).toBeInTheDocument();
-  });
-
-  it("displays degraded count in header", () => {
+  it("displays issue count when services are degraded", () => {
     render(
       <ServiceStatusWidget
         services={[makeServiceStatus({ name: "service-1", status: "degraded" })]}
       />
     );
-    expect(screen.getByText("1 degraded")).toBeInTheDocument();
-  });
-
-  it("displays error count in header", () => {
-    render(
-      <ServiceStatusWidget
-        services={[makeServiceStatus({ name: "service-1", status: "error" })]}
-      />
-    );
-    expect(screen.getByText("1 error")).toBeInTheDocument();
-  });
-
-  it("displays request rate per service", () => {
-    render(<ServiceStatusWidget services={[makeServiceStatus({ request_rate: 50.5 })]} />);
-    expect(screen.getByText("50.5/min")).toBeInTheDocument();
+    expect(screen.getByText("1 need attention")).toBeInTheDocument();
   });
 
   it("displays error rate per service", () => {

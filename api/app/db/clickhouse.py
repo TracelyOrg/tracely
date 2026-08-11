@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 
 import clickhouse_connect
 from clickhouse_connect.driver import Client
@@ -11,6 +12,8 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _client: Client | None = None
+_conn_kwargs: dict[str, str | int] | None = None
+_thread_local = threading.local()
 
 SPANS_TABLE_DDL = """
 CREATE TABLE IF NOT EXISTS spans (
@@ -85,10 +88,49 @@ def _parse_clickhouse_url(url: str) -> dict[str, str | int]:
 
 
 def get_clickhouse_client() -> Client:
-    """Return the module-level ClickHouse client. Must call init_clickhouse() first."""
-    if _client is None:
+    """Return a ClickHouse client dedicated to the current thread.
+
+    clickhouse_connect's Client is not safe to share across concurrent
+    queries on the same session (e.g. an insert running while another
+    request is querying), so each worker thread gets its own instance
+    instead of reusing one global client. Must call init_clickhouse() first.
+    """
+    if _conn_kwargs is None:
         raise RuntimeError("ClickHouse client not initialized. Call init_clickhouse() first.")
-    return _client
+    client = getattr(_thread_local, "client", None)
+    if client is None:
+        client = clickhouse_connect.get_client(**_conn_kwargs)
+        _thread_local.client = client
+    return client
+
+
+async def ch_query(query: str, parameters: dict | None = None):
+    """Run a SELECT query, fetching the thread-local client on the worker thread.
+
+    get_clickhouse_client() must be called from inside the thread that will
+    actually run the query — calling it upfront on the event loop thread would
+    hand out the same client to every concurrent request.
+    """
+    def _run():
+        return get_clickhouse_client().query(query, parameters=parameters)
+
+    return await asyncio.to_thread(_run)
+
+
+async def ch_command(command: str):
+    """Run a DDL/command statement on the current worker thread's client."""
+    def _run():
+        return get_clickhouse_client().command(command)
+
+    return await asyncio.to_thread(_run)
+
+
+async def ch_insert(table: str, rows: list, column_names: list[str]):
+    """Insert rows on the current worker thread's client."""
+    def _run():
+        return get_clickhouse_client().insert(table, rows, column_names=column_names)
+
+    return await asyncio.to_thread(_run)
 
 
 async def init_clickhouse() -> None:
@@ -98,7 +140,7 @@ async def init_clickhouse() -> None:
     crashing the app. Endpoints requiring ClickHouse will fail at request
     time if the client is unavailable.
     """
-    global _client
+    global _client, _conn_kwargs
     conn_kwargs = _parse_clickhouse_url(settings.clickhouse_url)
     try:
         _client = await asyncio.to_thread(
@@ -112,6 +154,7 @@ async def init_clickhouse() -> None:
         )
         return
 
+    _conn_kwargs = conn_kwargs
     logger.info("ClickHouse client connected to %s:%s", conn_kwargs["host"], conn_kwargs["port"])
 
     # Create spans table

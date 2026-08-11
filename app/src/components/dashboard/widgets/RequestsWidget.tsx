@@ -70,8 +70,8 @@ export function RequestsWidget({ data, className }: RequestsWidgetProps) {
         <span
           className={cn(
             "text-3xl font-bold tabular-nums",
-            isIncreasing && "text-emerald-500",
-            isDecreasing && "text-amber-500"
+            isIncreasing && "text-success",
+            isDecreasing && "text-warning"
           )}
         >
           {formatValue(currentValue)}
@@ -79,7 +79,7 @@ export function RequestsWidget({ data, className }: RequestsWidgetProps) {
         {(isIncreasing || isDecreasing) && (
           <span className={cn(
             "ml-2 text-sm",
-            isIncreasing ? "text-emerald-500" : "text-amber-500"
+            isIncreasing ? "text-success" : "text-warning"
           )}>
             {isIncreasing ? "↑" : "↓"}
           </span>

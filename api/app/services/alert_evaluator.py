@@ -9,7 +9,6 @@ This module provides evaluation functions for each alert type.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
@@ -19,7 +18,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.clickhouse import get_clickhouse_client
+from app.db.clickhouse import ch_query
 from app.models.alert_event import AlertEvent
 from app.models.alert_rule import AlertRule
 from app.services import alert_counters
@@ -123,9 +122,7 @@ async def evaluate_slow_responses(
     """
 
     try:
-        client = get_clickhouse_client()
-        result = await asyncio.to_thread(
-            client.query,
+        result = await ch_query(
             query,
             parameters={
                 "org_id": str(org_id),
@@ -178,9 +175,7 @@ async def evaluate_latency_spike(
     """
 
     try:
-        client = get_clickhouse_client()
-        result = await asyncio.to_thread(
-            client.query,
+        result = await ch_query(
             query,
             parameters={
                 "org_id": str(org_id),
@@ -280,9 +275,7 @@ async def _evaluate_volume_change(
     """
 
     try:
-        client = get_clickhouse_client()
-        result = await asyncio.to_thread(
-            client.query,
+        result = await ch_query(
             query,
             parameters={
                 "org_id": str(org_id),

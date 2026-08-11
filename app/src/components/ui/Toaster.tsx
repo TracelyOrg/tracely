@@ -12,7 +12,7 @@ const ICON_MAP: Record<ToastVariant, typeof CheckCircle> = {
 };
 
 const STYLE_MAP: Record<ToastVariant, string> = {
-  success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+  success: "border-success/30 bg-success/10 text-success",
   error: "border-destructive/30 bg-destructive/10 text-destructive",
   info: "border-border bg-background text-foreground",
 };

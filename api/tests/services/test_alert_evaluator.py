@@ -120,19 +120,12 @@ async def test_evaluate_slow_responses_triggers_when_p95_exceeded():
     mock_result = MagicMock()
     mock_result.result_rows = [[3000.0]]  # 3000ms P95
 
-    mock_client = MagicMock()
-    mock_client.query = MagicMock(return_value=mock_result)
+    with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
+        mock_to_thread.return_value = mock_result
 
-    with patch(
-        "app.services.alert_evaluator.get_clickhouse_client",
-        return_value=mock_client,
-    ):
-        with patch("asyncio.to_thread", new_callable=AsyncMock) as mock_to_thread:
-            mock_to_thread.return_value = mock_result
-
-            result = await alert_evaluator.evaluate_slow_responses(
-                org_id, project_id, threshold=2000, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_slow_responses(
+            org_id, project_id, threshold=2000, duration_seconds=300
+        )
 
     assert result.is_triggered is True
     assert result.metric_value == 3000.0
@@ -149,10 +142,9 @@ async def test_evaluate_slow_responses_does_not_trigger_when_below():
     mock_result.result_rows = [[1500.0]]  # 1500ms P95
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_slow_responses(
-                org_id, project_id, threshold=2000, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_slow_responses(
+            org_id, project_id, threshold=2000, duration_seconds=300
+        )
 
     assert result.is_triggered is False
     assert result.metric_value == 1500.0
@@ -172,10 +164,9 @@ async def test_evaluate_latency_spike_triggers_when_increase_exceeded():
     mock_result.result_rows = [[500.0, 100.0]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_latency_spike(
-                org_id, project_id, threshold=200, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_latency_spike(
+            org_id, project_id, threshold=200, duration_seconds=300
+        )
 
     assert result.is_triggered is True
     assert result.metric_value == 400.0  # 400% increase
@@ -192,10 +183,9 @@ async def test_evaluate_latency_spike_does_not_trigger_when_below():
     mock_result.result_rows = [[150.0, 100.0]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_latency_spike(
-                org_id, project_id, threshold=200, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_latency_spike(
+            org_id, project_id, threshold=200, duration_seconds=300
+        )
 
     assert result.is_triggered is False
     assert result.metric_value == 50.0
@@ -211,10 +201,9 @@ async def test_evaluate_latency_spike_handles_zero_baseline():
     mock_result.result_rows = [[500.0, 0.0]]  # No previous data
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_latency_spike(
-                org_id, project_id, threshold=200, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_latency_spike(
+            org_id, project_id, threshold=200, duration_seconds=300
+        )
 
     assert result.is_triggered is False
     assert result.metric_value == 0.0
@@ -234,10 +223,9 @@ async def test_evaluate_traffic_drop_triggers_when_drop_exceeded():
     mock_result.result_rows = [[40, 100]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_traffic_drop(
-                org_id, project_id, threshold=50, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_traffic_drop(
+            org_id, project_id, threshold=50, duration_seconds=300
+        )
 
     assert result.is_triggered is True
     assert result.metric_value == 60.0  # 60% drop
@@ -254,10 +242,9 @@ async def test_evaluate_traffic_drop_does_not_trigger_on_increase():
     mock_result.result_rows = [[200, 100]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_traffic_drop(
-                org_id, project_id, threshold=50, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_traffic_drop(
+            org_id, project_id, threshold=50, duration_seconds=300
+        )
 
     assert result.is_triggered is False
     assert result.metric_value == 0.0
@@ -277,10 +264,9 @@ async def test_evaluate_traffic_surge_triggers_when_increase_exceeded():
     mock_result.result_rows = [[500, 100]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_traffic_surge(
-                org_id, project_id, threshold=300, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_traffic_surge(
+            org_id, project_id, threshold=300, duration_seconds=300
+        )
 
     assert result.is_triggered is True
     assert result.metric_value == 400.0  # 400% increase
@@ -297,10 +283,9 @@ async def test_evaluate_traffic_surge_does_not_trigger_on_decrease():
     mock_result.result_rows = [[50, 100]]
 
     with patch("asyncio.to_thread", new_callable=AsyncMock, return_value=mock_result):
-        with patch("app.services.alert_evaluator.get_clickhouse_client"):
-            result = await alert_evaluator.evaluate_traffic_surge(
-                org_id, project_id, threshold=300, duration_seconds=300
-            )
+        result = await alert_evaluator.evaluate_traffic_surge(
+            org_id, project_id, threshold=300, duration_seconds=300
+        )
 
     assert result.is_triggered is False
     assert result.metric_value == 0.0

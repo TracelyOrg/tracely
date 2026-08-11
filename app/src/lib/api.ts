@@ -33,7 +33,7 @@ async function tryRefresh(): Promise<boolean> {
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {},
-  _retried = false
+  _retried = false,
 ): Promise<T> {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
@@ -59,10 +59,12 @@ export async function apiFetch<T>(
       return apiFetch<T>(path, options, true);
     }
 
-    // Refresh failed — redirect to login
     if (typeof window !== "undefined") {
       window.location.href = "/login";
     }
+    throw new ApiError(401, {
+      error: { code: "UNAUTHORIZED", message: "Not authenticated" },
+    });
   }
 
   const body = await res.json();

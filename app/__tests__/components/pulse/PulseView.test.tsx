@@ -39,6 +39,10 @@ jest.mock("@/hooks/useEventStream", () => ({
   useEventStream: (...args: unknown[]) => mockUseEventStream(...args),
 }));
 
+jest.mock("@/hooks/useHealthData", () => ({
+  useHealthData: () => ({ data: undefined, isLoading: false }),
+}));
+
 // Mock framer-motion to avoid animation complexities in tests
 jest.mock("framer-motion", () => ({
   motion: {
@@ -74,7 +78,19 @@ jest.mock("@tanstack/react-virtual", () => ({
 // Reset store before each test
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 
-import LivePage from "@/app/(dashboard)/[orgSlug]/[projectSlug]/live/page";
+import LivePageClient from "@/app/(dashboard)/[orgSlug]/[projectSlug]/live/LivePageContent";
+
+const defaultProps = {
+  orgSlug: "test-org",
+  projectSlug: "test-project",
+  projectId: "proj-uuid",
+  initialSpans: [] as import("@/types/span").SpanEvent[],
+  initialHasMoreHistory: false,
+};
+
+function renderLivePage(overrides: Partial<typeof defaultProps> = {}) {
+  return render(<LivePageClient {...defaultProps} {...overrides} />);
+}
 
 describe("PulseView Page", () => {
   beforeEach(() => {
@@ -86,13 +102,34 @@ describe("PulseView Page", () => {
     });
   });
 
-  it("shows skeleton loading state during initial project load (AC4, UX7)", () => {
-    // apiFetch never resolves → loading stays true
-    mockApiFetch.mockReturnValue(new Promise(() => {}));
+  it("shows skeleton loading state while re-fetching after leaving historical mode (AC4, UX7)", async () => {
+    mockApiFetch.mockImplementation((url: string) => {
+      if (url.includes("/spans")) {
+        return new Promise(() => {});
+      }
+      return Promise.resolve({ data: [] });
+    });
 
-    render(<LivePage />);
+    renderLivePage();
 
-    // Skeleton has multiple animate-pulse divs
+    const { useFilterStore } = await import("@/stores/filterStore");
+    useFilterStore.setState((state) => ({
+      filters: {
+        ...state.filters,
+        timeRange: {
+          preset: "custom",
+          start: "2026-01-01T00:00:00.000Z",
+          end: "2026-01-02T00:00:00.000Z",
+        },
+      },
+    }));
+
+    await screen.findByText("No requests in this time range");
+
+    useFilterStore.setState((state) => ({
+      filters: { ...state.filters, timeRange: { preset: "5m" } },
+    }));
+
     const pulsingElements = document.querySelectorAll(".animate-pulse");
     expect(pulsingElements.length).toBeGreaterThan(0);
   });
@@ -111,7 +148,7 @@ describe("PulseView Page", () => {
       firstEventReceived: false,
     });
 
-    render(<LivePage />);
+    renderLivePage();
 
     await screen.findByText("Get started");
 
@@ -119,7 +156,7 @@ describe("PulseView Page", () => {
     expect(screen.getByText("Full setup guide")).toBeInTheDocument();
     expect(
       screen.getByText("Full setup guide").getAttribute("href")
-    ).toBe("/test-org/test-project/onboarding");
+    ).toBe("https://tracely.sh/docs");
   });
 
   it("renders live header with connection status", async () => {
@@ -131,7 +168,7 @@ describe("PulseView Page", () => {
       firstEventReceived: false,
     });
 
-    render(<LivePage />);
+    renderLivePage();
 
     await screen.findByTestId("header-time-range");
     expect(screen.getByText("Live")).toBeInTheDocument();
@@ -146,7 +183,7 @@ describe("PulseView Page", () => {
       firstEventReceived: false,
     });
 
-    render(<LivePage />);
+    renderLivePage();
 
     await screen.findByTestId("header-time-range");
     expect(screen.getByText("Connecting...")).toBeInTheDocument();
@@ -161,20 +198,15 @@ describe("PulseView Page", () => {
       firstEventReceived: false,
     });
 
-    render(<LivePage />);
+    renderLivePage();
 
     await screen.findByTestId("header-time-range");
     expect(screen.getByText("Disconnected")).toBeInTheDocument();
   });
 
   it("passes projectId and onSpan to useEventStream", async () => {
-    mockApiFetch.mockResolvedValue({
-      data: { id: "proj-123", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
-    });
+    renderLivePage({ projectId: "proj-123" });
 
-    render(<LivePage />);
-
-    // Wait for effect to trigger
     await screen.findByTestId("header-time-range");
 
     expect(mockUseEventStream).toHaveBeenCalledWith(
@@ -189,21 +221,17 @@ describe("PulseView Page", () => {
   // --- Story 3.2: Back to Live button ---
 
   it("shows 'Back to Live' button when scrolled away from bottom with spans (AC2, UX17)", async () => {
-    mockApiFetch.mockResolvedValue({
-      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
-    });
     mockUseEventStream.mockReturnValue({
       status: "connected",
       firstEventReceived: true,
     });
 
-    // Pre-populate store with spans and set isAtBottom = false
-    useLiveStreamStore.getState().addSpan({
+    const testSpan = {
       trace_id: "t1",
       span_id: "s1",
       parent_span_id: "",
       span_name: "GET /api/test",
-      span_type: "span",
+      span_type: "span" as const,
       service_name: "api",
       kind: "SERVER",
       start_time: "2026-02-03T10:00:00Z",
@@ -213,31 +241,27 @@ describe("PulseView Page", () => {
       http_route: "/api/test",
       http_status_code: 200,
       environment: "",
-    });
-    useLiveStreamStore.getState().setIsAtBottom(false);
+    };
 
-    render(<LivePage />);
+    renderLivePage({ initialSpans: [testSpan], initialHasMoreHistory: true });
+    useLiveStreamStore.getState().setIsAtBottom(false);
 
     await screen.findByTestId("header-time-range");
     expect(screen.getByText("Back to Live")).toBeInTheDocument();
   });
 
   it("does NOT show 'Back to Live' button when at bottom (AC3)", async () => {
-    mockApiFetch.mockResolvedValue({
-      data: { id: "proj-uuid", name: "Test", slug: "test-project", org_id: "org-1", created_at: "" },
-    });
     mockUseEventStream.mockReturnValue({
       status: "connected",
       firstEventReceived: true,
     });
 
-    // Pre-populate store with spans — isAtBottom stays true (default)
-    useLiveStreamStore.getState().addSpan({
+    const testSpan = {
       trace_id: "t1",
       span_id: "s1",
       parent_span_id: "",
       span_name: "GET /api/test",
-      span_type: "span",
+      span_type: "span" as const,
       service_name: "api",
       kind: "SERVER",
       start_time: "2026-02-03T10:00:00Z",
@@ -247,9 +271,9 @@ describe("PulseView Page", () => {
       http_route: "/api/test",
       http_status_code: 200,
       environment: "",
-    });
+    };
 
-    render(<LivePage />);
+    renderLivePage({ initialSpans: [testSpan], initialHasMoreHistory: true });
 
     await screen.findByTestId("header-time-range");
     expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();
@@ -275,7 +299,7 @@ describe("PulseView Page", () => {
     // isAtBottom = false but no spans
     useLiveStreamStore.getState().setIsAtBottom(false);
 
-    render(<LivePage />);
+    renderLivePage();
 
     await screen.findByText("Get started");
     expect(screen.queryByText("Back to Live")).not.toBeInTheDocument();

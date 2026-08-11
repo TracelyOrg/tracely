@@ -27,7 +27,10 @@ async function proxyToFastAPI(req: NextRequest): Promise<NextResponse> {
 
   const res = new NextResponse(data, {
     status: upstream.status,
-    headers: { "content-type": upstream.headers.get("content-type") ?? "application/json" },
+    headers: {
+      "content-type":
+        upstream.headers.get("content-type") ?? "application/json",
+    },
   });
 
   // Forward set-cookie headers from FastAPI

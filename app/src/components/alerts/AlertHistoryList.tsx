@@ -78,8 +78,8 @@ function EmptyState() {
 function ErrorState({ message }: { message?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="rounded-full bg-red-100 dark:bg-red-900/30 p-4 mb-4">
-        <AlertTriangle className="size-8 text-red-500" />
+      <div className="mb-4 rounded-full bg-destructive/10 p-4">
+        <AlertTriangle className="size-8 text-destructive" />
       </div>
       <h3 className="text-lg font-medium text-foreground mb-2">Failed to load history</h3>
       <p className="text-sm text-muted-foreground text-center max-w-md">

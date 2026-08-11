@@ -1,11 +1,17 @@
-.PHONY: up down infra api app website website-install test migrate lint dev sdk-install sdk-example
+.PHONY: up down infra infra-dev infra-down infra-dev-down api app website website-install test migrate lint dev sdk-install sdk-example
 
 # ── Infrastructure ──────────────────────────────────────────
 infra:
-	docker compose up -d
+	export DOCKER_API_VERSION=1.41 && docker compose -f docker-compose.yml up --build
+
+infra-dev:
+	export DOCKER_API_VERSION=1.41 && docker compose -f docker-compose.dev.yml up --build
 
 infra-down:
 	docker compose down
+
+infra-dev-down:
+	docker compose -f docker-compose.dev.yml down
 
 infra-reset:
 	docker compose down -v

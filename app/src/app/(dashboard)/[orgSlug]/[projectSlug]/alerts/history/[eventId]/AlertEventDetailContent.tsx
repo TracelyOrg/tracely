@@ -9,7 +9,6 @@ import {
   AlertCircle,
   Info,
   Clock,
-  CheckCircle,
   Bell,
   Mail,
   MessageSquare,
@@ -20,21 +19,14 @@ import {
 import { apiFetch } from "@/lib/api";
 import { queryKeys } from "@/lib/queries";
 import type { DataEnvelope } from "@/types/api";
-import type { AlertEvent, AlertCategory, AlertEventStatus } from "@/types/alert";
+import type { AlertEvent, AlertCategory } from "@/types/alert";
 import MetricBreachChart from "@/components/alerts/MetricBreachChart";
+import { ALERT_CATEGORY_TEXT, ALERT_EVENT_BADGE } from "@/lib/statusStyles";
 
-// Status colors
-const STATUS_COLORS: Record<AlertEventStatus, string> = {
-  active: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-400",
-  resolved: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400",
-  acknowledged: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400",
-};
-
-// Category to severity mapping
-const CATEGORY_SEVERITY: Record<AlertCategory, { icon: typeof AlertTriangle; colorClass: string; label: string }> = {
-  availability: { icon: AlertTriangle, colorClass: "text-red-500", label: "Critical" },
-  performance: { icon: AlertCircle, colorClass: "text-amber-500", label: "Warning" },
-  volume: { icon: Info, colorClass: "text-blue-500", label: "Info" },
+const CATEGORY_SEVERITY: Record<AlertCategory, { icon: typeof AlertTriangle; label: string }> = {
+  availability: { icon: AlertTriangle, label: "Critical" },
+  performance: { icon: AlertCircle, label: "Warning" },
+  volume: { icon: Info, label: "Info" },
 };
 
 function formatTimestamp(isoString: string): string {
@@ -132,8 +124,8 @@ export default function AlertEventDetailContent() {
   if (error || !eventData) {
     return (
       <div className="p-4">
-        <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50 p-4">
-          <p className="text-sm text-red-600 dark:text-red-400">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive">
             Failed to load alert event. The event may not exist or you may not have access.
           </p>
           <button
@@ -174,10 +166,10 @@ export default function AlertEventDetailContent() {
       {/* Header */}
       <div className="space-y-2">
         <div className="flex items-center gap-3">
-          <SeverityIcon className={`size-6 ${severity.colorClass}`} />
+          <SeverityIcon className={`size-6 ${ALERT_CATEGORY_TEXT[event.rule_category]}`} />
           <h1 className="text-xl font-semibold text-foreground">{event.rule_name}</h1>
           <span
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${STATUS_COLORS[event.status]}`}
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium capitalize ${ALERT_EVENT_BADGE[event.status]}`}
           >
             {event.status === "active" && <Bell className="size-3" />}
             {event.status}
@@ -222,7 +214,7 @@ export default function AlertEventDetailContent() {
             <InfoRow
               label="Breach"
               value={
-                <span className="text-red-500">
+                <span className="text-destructive">
                   {((event.metric_value / event.threshold_value - 1) * 100).toFixed(1)}% over threshold
                 </span>
               }
@@ -272,12 +264,12 @@ export default function AlertEventDetailContent() {
               {/* Email notification */}
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-blue-500/10 p-2">
-                    <Mail className="size-4 text-blue-500" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <Mail className="size-4 text-foreground" />
                   </div>
                   <span className="text-sm text-foreground">Email</span>
                 </div>
-                <span className={`text-xs ${event.notification_sent ? "text-green-500" : "text-muted-foreground"}`}>
+                <span className={`text-xs ${event.notification_sent ? "text-success" : "text-muted-foreground"}`}>
                   {event.notification_sent ? "Sent" : "Pending"}
                 </span>
               </div>
@@ -285,8 +277,8 @@ export default function AlertEventDetailContent() {
               {/* Slack placeholder */}
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-purple-500/10 p-2">
-                    <MessageSquare className="size-4 text-purple-500" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <MessageSquare className="size-4 text-muted-foreground" />
                   </div>
                   <span className="text-sm text-foreground">Slack</span>
                 </div>

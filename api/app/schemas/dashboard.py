@@ -75,6 +75,7 @@ class EndpointStats(BaseModel):
     method: str = Field(..., description="HTTP method (GET, POST, etc.)")
     count: int = Field(0, description="Total request count")
     avg_latency: float = Field(0.0, description="Average latency in ms")
+    p95_latency: float = Field(0.0, description="P95 latency in ms")
     error_rate: float = Field(0.0, description="Error rate percentage")
 
 
@@ -83,6 +84,14 @@ class LatencyBucket(BaseModel):
     range: str = Field(..., description="Range description (e.g., '0-50ms')")
     label: str = Field(..., description="Short label for chart (e.g., '<50')")
     count: int = Field(0, description="Number of requests in this bucket")
+
+
+class PeriodSummary(BaseModel):
+    """Aggregate metrics for a comparison time window."""
+    total_requests: int = Field(0, description="Total requests in the period")
+    total_errors: int = Field(0, description="Total errors in the period")
+    error_rate: float = Field(0.0, description="Error rate percentage")
+    p95_latency: float = Field(0.0, description="P95 latency in ms")
 
 
 class DashboardMetricsResponse(BaseModel):
@@ -124,4 +133,13 @@ class DashboardMetricsResponse(BaseModel):
     services: list[ServiceStatus] = Field(
         default_factory=list,
         description="Service status indicators"
+    )
+
+    previous_period: PeriodSummary | None = Field(
+        None,
+        description="Summary for the immediately preceding window of equal duration",
+    )
+    available_environments: list[str] = Field(
+        default_factory=list,
+        description="Distinct deployment environments seen in the last 7 days",
     )

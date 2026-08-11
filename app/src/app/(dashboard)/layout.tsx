@@ -208,17 +208,30 @@ export default function DashboardLayout({
     );
   }
 
-  if (!authenticated) return null;
+  if (!authenticated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Redirecting…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
       {!onOnboarding && (
-        <header className="flex h-12 items-center border-b px-4">
-          <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
-          <div className="ml-auto flex items-center gap-4">
+        <header className="flex h-12 items-center gap-2 border-b px-3 sm:px-4">
+          <div className="min-w-0 shrink">
+            <BreadcrumbPicker currentOrgSlug={currentOrgSlug} currentProjectSlug={currentProjectSlug} />
+          </div>
+          {/* Right cluster scrolls horizontally instead of breaking the page layout
+              when nav + toggle + avatar don't fit a narrow viewport. */}
+          <div className="ml-auto flex min-w-0 items-center gap-3 overflow-x-auto sm:gap-4">
             {/* Top bar navigation menu (Story 4.2) */}
             {currentOrgSlug && currentProjectSlug && (
-              <nav className="flex items-center gap-6" aria-label="Main navigation">
+              <nav className="flex shrink-0 items-center gap-4 sm:gap-6" aria-label="Main navigation">
                 <Link
                   href={`/${currentOrgSlug}/${currentProjectSlug}/live`}
                   className={cn(
@@ -280,7 +293,7 @@ export default function DashboardLayout({
             <button
               type="button"
               onClick={toggleTheme}
-              className="flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+              className="flex shrink-0 items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
               aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
             >
               {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
@@ -288,7 +301,7 @@ export default function DashboardLayout({
             {/* User avatar */}
             {user && (
               <div
-                className="flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium"
+                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium"
                 title={user.full_name || user.email}
               >
                 {getInitials(user.full_name, user.email)}

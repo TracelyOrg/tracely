@@ -140,7 +140,7 @@ export default function ProjectSettingsClient() {
         </div>
 
         {error && (
-          <p className="mt-4 text-sm text-red-500">{error}</p>
+          <p className="mt-4 text-sm text-destructive">{error}</p>
         )}
 
         {loading ? (

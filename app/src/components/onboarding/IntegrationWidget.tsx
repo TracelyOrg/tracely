@@ -20,13 +20,13 @@ function PulsingDot() {
     >
       {/* Outer pulse ring */}
       <motion.div
-        className="absolute size-10 rounded-full bg-emerald-500/20"
+        className="absolute size-10 rounded-full bg-success/20"
         animate={{ scale: [1, 1.8, 1], opacity: [0.5, 0, 0.5] }}
         transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
       />
       {/* Inner dot */}
       <motion.div
-        className="size-4 rounded-full bg-emerald-500"
+        className="size-4 rounded-full bg-success"
         animate={{ scale: [1, 1.15, 1] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
       />
@@ -49,7 +49,7 @@ function GreenCheckmark() {
       aria-label="Connected"
     >
       <motion.div
-        className="flex size-12 items-center justify-center rounded-full bg-emerald-500"
+        className="flex size-12 items-center justify-center rounded-full bg-success"
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
         transition={{
@@ -108,7 +108,7 @@ export default function IntegrationWidget({
             transition={{ duration: NORMAL }}
             className="mt-4 text-center"
           >
-            <p className="text-sm font-medium text-emerald-600">
+            <p className="text-sm font-medium text-success">
               Connection verified
             </p>
             <p className="mt-1 text-xs text-muted-foreground">

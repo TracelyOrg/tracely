@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import type { DataEnvelope } from "@/types/api";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 interface RegisterResult {
   message: string;
@@ -43,11 +43,9 @@ export default function RegisterForm() {
         {
           method: "POST",
           body: JSON.stringify({ email, password }),
-        }
+        },
       );
-      router.push(
-        `/verify-email?email=${encodeURIComponent(res.data.email)}`
-      );
+      router.push(`/verify-email?email=${encodeURIComponent(res.data.email)}`);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.details) {
@@ -60,6 +58,7 @@ export default function RegisterForm() {
           setError(err.message);
         }
       } else {
+        console.error(err);
         setError("Something went wrong. Please try again.");
       }
     } finally {
@@ -150,7 +149,10 @@ export default function RegisterForm() {
 
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+        <Link
+          href="/login"
+          className="text-primary underline-offset-4 hover:underline"
+        >
           Log in
         </Link>
       </p>

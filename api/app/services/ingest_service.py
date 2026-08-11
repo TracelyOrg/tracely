@@ -5,7 +5,7 @@ import logging
 import uuid
 from typing import Any
 
-from app.db.clickhouse import get_clickhouse_client
+from app.db.clickhouse import ch_insert
 from app.schemas.stream import build_span_summary
 from app.services import alert_counters
 from app.services.stream_manager import connection_manager
@@ -65,13 +65,7 @@ async def ingest_traces(
         row = [span[col] for col in SPANS_COLUMNS]
         rows.append(row)
 
-    client = get_clickhouse_client()
-    await asyncio.to_thread(
-        client.insert,
-        "spans",
-        rows,
-        column_names=SPANS_COLUMNS,
-    )
+    await ch_insert("spans", rows, column_names=SPANS_COLUMNS)
 
     # Update alert counters for critical alert evaluation (non-blocking)
     # Count errors and requests for inline critical alert evaluation

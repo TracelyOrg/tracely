@@ -122,9 +122,19 @@ export default function MetricBreachChart({
   const breachStart = triggeredAt;
   const breachEnd = resolvedAt || new Date().toISOString();
 
-  // Chart colors based on category
-  const lineColor = category === "availability" ? "#ef4444" : category === "performance" ? "#f59e0b" : "#3b82f6";
-  const breachColor = category === "availability" ? "rgba(239, 68, 68, 0.1)" : category === "performance" ? "rgba(245, 158, 11, 0.1)" : "rgba(59, 130, 246, 0.1)";
+  // Chart colors from design tokens
+  const lineColor =
+    category === "availability"
+      ? "var(--destructive)"
+      : category === "performance"
+        ? "var(--warning)"
+        : "var(--muted-foreground)";
+  const breachColor =
+    category === "availability"
+      ? "color-mix(in oklch, var(--destructive) 12%, transparent)"
+      : category === "performance"
+        ? "color-mix(in oklch, var(--warning) 12%, transparent)"
+        : "color-mix(in oklch, var(--muted-foreground) 12%, transparent)";
 
   return (
     <div className="h-64">
@@ -161,12 +171,12 @@ export default function MetricBreachChart({
           {/* Threshold line */}
           <ReferenceLine
             y={threshold}
-            stroke="#dc2626"
+            stroke="var(--destructive)"
             strokeDasharray="5 5"
             label={{
               value: `Threshold: ${formatYAxis(threshold, category)}`,
               position: "right",
-              fill: "#dc2626",
+              fill: "var(--destructive)",
               fontSize: 11,
             }}
           />

@@ -79,9 +79,9 @@ function calculateStatusFromMetrics(errorRate: number, p95: number): HealthStatu
 }
 
 const statusConfig = {
-  healthy: { color: "text-emerald-500", bgColor: "bg-emerald-500/10", Icon: CheckCircle2, label: "Healthy" },
-  degraded: { color: "text-amber-500", bgColor: "bg-amber-500/10", Icon: AlertTriangle, label: "Degraded" },
-  error: { color: "text-red-500", bgColor: "bg-red-500/10", Icon: XCircle, label: "Error" },
+  healthy: { color: "text-success", bgColor: "bg-success/10", Icon: CheckCircle2, label: "Healthy" },
+  degraded: { color: "text-warning", bgColor: "bg-warning/10", Icon: AlertTriangle, label: "Degraded" },
+  error: { color: "text-destructive", bgColor: "bg-destructive/10", Icon: XCircle, label: "Error" },
 };
 
 export default function BreadcrumbPicker({
@@ -239,12 +239,12 @@ export default function BreadcrumbPicker({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
       {/* Home link - show logo on home page, icon elsewhere */}
       <button
         type="button"
         onClick={() => router.push("/")}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+        className="flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium hover:bg-accent sm:px-2"
         aria-label="Home"
       >
         {currentOrgSlug ? (
@@ -290,13 +290,13 @@ export default function BreadcrumbPicker({
 
       {/* Org picker */}
       {currentOrgSlug && (
-        <div className="relative" ref={orgRef}>
+        <div className="relative min-w-0" ref={orgRef}>
           <button
             type="button"
             onClick={() => setOrgOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+            className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium hover:bg-accent sm:px-2"
           >
-            <span className="max-w-[160px] truncate">
+            <span className="max-w-[70px] truncate sm:max-w-[160px]">
               {currentOrg?.name ?? "Select organization"}
             </span>
             <ChevronDown open={orgOpen} />
@@ -324,14 +324,14 @@ export default function BreadcrumbPicker({
       {/* Separator + Project picker (only when org is selected and projects exist) */}
       {currentOrgSlug && (
         <>
-          <span className="text-muted-foreground">/</span>
-          <div className="relative" ref={projectRef}>
+          <span className="shrink-0 text-muted-foreground">/</span>
+          <div className="relative min-w-0" ref={projectRef}>
             <button
               type="button"
               onClick={() => setProjectOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+              className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium hover:bg-accent sm:px-2"
             >
-              <span className="max-w-[160px] truncate">
+              <span className="max-w-[70px] truncate sm:max-w-[160px]">
                 {currentProject?.name ?? "Select project"}
               </span>
               <ChevronDown open={projectOpen} />
@@ -362,14 +362,14 @@ export default function BreadcrumbPicker({
       {/* Separator + Environment picker (only when project is selected and envs exist) */}
       {currentProjectSlug && availableEnvironments.length > 0 && (
         <>
-          <span className="text-muted-foreground">/</span>
-          <div className="relative" ref={envRef}>
+          <span className="shrink-0 text-muted-foreground">/</span>
+          <div className="relative min-w-0" ref={envRef}>
             <button
               type="button"
               onClick={() => setEnvOpen((prev) => !prev)}
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium hover:bg-accent"
+              className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-medium hover:bg-accent sm:px-2"
             >
-              <span className="max-w-[160px] truncate">
+              <span className="max-w-[60px] truncate sm:max-w-[160px]">
                 {currentEnvironment ?? "All Envs"}
               </span>
               <ChevronDown open={envOpen} />
@@ -414,7 +414,7 @@ export default function BreadcrumbPicker({
       {currentProjectSlug && worstStatus && !healthLoading && (
         <div
           className={cn(
-            "ml-2 flex items-center gap-1.5 rounded-md px-2 py-1",
+            "ml-2 hidden shrink-0 items-center gap-1.5 rounded-md px-2 py-1 sm:flex",
             statusConfig[worstStatus].bgColor
           )}
           data-testid="breadcrumb-health-badge"

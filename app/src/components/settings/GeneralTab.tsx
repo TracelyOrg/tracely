@@ -114,7 +114,7 @@ export default function GeneralTab({
             aria-label="Copy slug"
           >
             {copied ? (
-              <Check className="size-4 text-emerald-500" />
+              <Check className="size-4 text-success" />
             ) : (
               <Copy className="size-4" />
             )}

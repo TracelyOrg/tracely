@@ -16,9 +16,9 @@ import { queryKeys } from "@/lib/queries";
 
 // Category configuration with icons and colors
 const CATEGORY_CONFIG: Record<AlertCategory, { label: string; colorClass: string; Icon: typeof Shield }> = {
-  availability: { label: "Availability", colorClass: "text-red-500", Icon: Shield },
-  performance: { label: "Performance", colorClass: "text-amber-500", Icon: Gauge },
-  volume: { label: "Volume", colorClass: "text-blue-500", Icon: TrendingUp },
+  availability: { label: "Availability", colorClass: "text-destructive", Icon: Shield },
+  performance: { label: "Performance", colorClass: "text-warning", Icon: Gauge },
+  volume: { label: "Volume", colorClass: "text-muted-foreground", Icon: TrendingUp },
 };
 
 // Category display order
@@ -250,7 +250,7 @@ function AlertEditModal({
 
         {/* Custom indicator */}
         {isCustom && (
-          <p className="text-xs text-amber-500 mt-4 text-center">
+          <p className="text-xs text-warning mt-4 text-center">
             These settings differ from the preset defaults
           </p>
         )}
@@ -533,7 +533,7 @@ function AlertTemplateCard({
           </button>
           <h3 className="font-medium text-foreground">{template.name}</h3>
           {hasCustomValues && (
-            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-warning/10 text-warning text-warning">
               Custom
             </span>
           )}
@@ -541,7 +541,7 @@ function AlertTemplateCard({
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
             displayActive
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              ? "bg-success/10 text-success text-success"
               : "bg-muted text-muted-foreground"
           }`}
         >
@@ -594,7 +594,7 @@ function AlertTemplateCard({
             <button
               type="button"
               onClick={() => setShowDeleteDialog(true)}
-              className="text-xs text-red-500 hover:text-red-600 transition-colors flex items-center gap-1"
+              className="text-xs text-destructive hover:text-destructive transition-colors flex items-center gap-1"
               aria-label="Delete alert"
             >
               <Trash2 className="size-3" />
@@ -747,7 +747,7 @@ function NotificationChannelsSection({
         className="w-full flex items-center justify-between group"
       >
         <div className="flex items-center gap-2">
-          <Bell className="size-5 text-purple-500" />
+          <Bell className="size-5 text-foreground" />
           <h2 className="text-lg font-semibold text-foreground">Notification Channels</h2>
           <span className="text-sm text-muted-foreground">
             ({configuredCount} configured)
@@ -777,15 +777,15 @@ function NotificationChannelsSection({
               {/* Email - Always On */}
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="rounded-lg bg-blue-500/10 p-2">
-                    <Mail className="size-4 text-blue-500" />
+                  <div className="rounded-lg bg-muted p-2">
+                    <Mail className="size-4 text-foreground" />
                   </div>
                   <h3 className="font-medium text-foreground">Email</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
                   Sent to all organization admins
                 </p>
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-xs text-success text-success">
                   <Check className="size-3" />
                   Always On
                 </span>
@@ -795,8 +795,8 @@ function NotificationChannelsSection({
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-purple-500/10 p-2">
-                      <MessageSquare className="size-4 text-purple-500" />
+                    <div className="rounded-lg bg-muted p-2">
+                      <MessageSquare className="size-4 text-foreground" />
                     </div>
                     <h3 className="font-medium text-foreground">Slack</h3>
                   </div>
@@ -830,8 +830,8 @@ function NotificationChannelsSection({
               <div className="rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-indigo-500/10 p-2">
-                      <MessageSquare className="size-4 text-indigo-500" />
+                    <div className="rounded-lg bg-muted p-2">
+                      <MessageSquare className="size-4 text-muted-foreground" />
                     </div>
                     <h3 className="font-medium text-foreground">Discord</h3>
                   </div>
@@ -1001,8 +1001,8 @@ export default function AlertsPageClient() {
 
       {/* Error state */}
       {error && !isLoading && (
-        <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/50 p-4">
-          <p className="text-sm text-red-600 dark:text-red-400">
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+          <p className="text-sm text-destructive">
             Failed to load alert templates. Please try again later.
           </p>
         </div>

@@ -14,7 +14,8 @@ interface LiveStreamState {
   isLoadingHistory: boolean;
   hasMoreHistory: boolean;
   addSpan: (span: SpanEvent) => void;
-  prependSpans: (older: SpanEvent[]) => void;
+  /** Prepends older spans, skipping ones already in the store. Returns the number of new root spans actually added. */
+  prependSpans: (older: SpanEvent[]) => number;
   toggleExpanded: (spanId: string) => void;
   setIsAtBottom: (value: boolean) => void;
   setLoadingHistory: (value: boolean) => void;
@@ -96,7 +97,9 @@ export const useLiveStreamStore = create<LiveStreamState>((set) => ({
       }
     }),
 
-  prependSpans: (older) =>
+  prependSpans: (older) => {
+    let addedCount = 0;
+
     set((state) => {
       const existingRootIds = new Set(state.spans.map((s) => s.span_id));
 
@@ -127,11 +130,16 @@ export const useLiveStreamStore = create<LiveStreamState>((set) => ({
         }
       }
 
+      addedCount = newRoots.length;
+
       return {
         spans: [...newRoots, ...state.spans],
         childrenMap: newChildrenMap,
       };
-    }),
+    });
+
+    return addedCount;
+  },
 
   toggleExpanded: (spanId) =>
     set((state) => {

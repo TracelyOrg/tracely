@@ -113,7 +113,7 @@ export default function BulkActionBar({
           <>
             <button
               onClick={handleActivate}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-md hover:bg-emerald-500/20 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-success/10 text-success text-success rounded-md hover:bg-success/20 transition-colors"
             >
               <Power className="size-4" />
               Activate

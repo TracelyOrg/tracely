@@ -1,105 +1,180 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { memo, useCallback, useMemo } from "react";
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  Cell,
 } from "recharts";
 import type { DataPoint } from "@/types/dashboard";
+import type { TimeRange, TimeRangePreset } from "@/types/span";
+import { useRouter } from "next/navigation";
+import { buildLiveUrl } from "@/lib/liveLinks";
+import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
+import { DashboardWindowNudge } from "@/components/dashboard/DashboardWindowNudge";
+import { DashboardChartTooltip } from "@/components/dashboard/charts/DashboardChartTooltip";
+import { DASHBOARD_CHART, formatAggregatedAxisTick } from "@/lib/dashboardChartTheme";
+import {
+  aggregateTimeSeries,
+  formatCompactNumber,
+  getBucketMsForTimeRange,
+} from "@/lib/dashboardChartAggregation";
+import { DASHBOARD_METRIC_HELP } from "@/lib/dashboardMetricHelp";
 
 interface ErrorsTimelineWidgetProps {
   data: DataPoint[];
+  timeRange: TimeRange;
+  orgSlug?: string;
+  projectSlug?: string;
+  environment?: string | null;
+  onExpandWindow?: (preset: TimeRangePreset) => void;
   className?: string;
 }
 
-/**
- * Errors timeline area chart showing error count over time.
- * Uses a gradient fill to emphasize error spikes.
- */
-export function ErrorsTimelineWidget({ data, className }: ErrorsTimelineWidgetProps) {
-  const chartData = data.map((point) => ({
-    time: new Date(point.timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    errors: point.value,
-  }));
+function timeRangeKey(timeRange: TimeRange): string {
+  return `${timeRange.preset}|${timeRange.start ?? ""}|${timeRange.end ?? ""}`;
+}
 
-  const totalErrors = data.reduce((sum, d) => sum + d.value, 0);
-  const maxErrors = Math.max(...data.map((d) => d.value), 0);
+function ErrorsTimelineWidgetInner({
+  data,
+  timeRange,
+  orgSlug,
+  projectSlug,
+  environment,
+  onExpandWindow,
+  className,
+}: ErrorsTimelineWidgetProps) {
+  const router = useRouter();
+  const drillDown = !!(orgSlug && projectSlug);
+  const rangeKey = timeRangeKey(timeRange);
+
+  const chartData = useMemo(() => {
+    const bucketMs = getBucketMsForTimeRange(timeRange);
+    return aggregateTimeSeries(data, bucketMs, "sum");
+  }, [data, rangeKey, timeRange]);
+
+  const totalErrors = useMemo(() => data.reduce((sum, d) => sum + d.value, 0), [data]);
+
+  const navigateToErrorBucket = useCallback(
+    (timestamp: string, errors: number) => {
+      if (!drillDown || errors <= 0) return;
+
+      const bucketMs = getBucketMsForTimeRange(timeRange);
+      const start = timestamp;
+      const end = new Date(new Date(timestamp).getTime() + bucketMs).toISOString();
+      router.push(
+        buildLiveUrl(orgSlug!, projectSlug!, {
+          timeRange: { preset: "custom", start, end },
+          environment,
+          statusGroups: ["4xx", "5xx"],
+        })
+      );
+    },
+    [drillDown, timeRange, orgSlug, projectSlug, environment, router]
+  );
+
+  const resolveClickedIndex = (
+    state: { activeTooltipIndex?: string | number | null; activeIndex?: string | number | null }
+  ): number | null => {
+    const rawIndex = state.activeTooltipIndex ?? state.activeIndex;
+    if (rawIndex == null || rawIndex === "") return null;
+    return Number(rawIndex);
+  };
 
   return (
-    <motion.div
-      data-testid="errors-timeline-widget"
+    <DashboardPanel
+      title="Errors"
+      description={DASHBOARD_METRIC_HELP.errorsTimeline}
+      testId="errors-timeline-widget"
       className={className}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
+      action={
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {totalErrors.toLocaleString()} total
+        </span>
+      }
     >
-      <div className="rounded-xl border bg-card p-4 h-full">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-medium text-muted-foreground">Errors Over Time</h3>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-muted-foreground">
-              Total: <span className="font-medium text-destructive">{totalErrors}</span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Peak: <span className="font-medium text-destructive">{maxErrors}</span>
-            </span>
-          </div>
-        </div>
-
-        <div className="h-[140px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="errorGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                width={40}
-                allowDecimals={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                }}
-                formatter={(value) => [`${value} errors`, "Errors"]}
-              />
-              <Area
-                type="monotone"
-                dataKey="errors"
-                stroke="hsl(var(--destructive))"
-                strokeWidth={2}
-                fill="url(#errorGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+      <div
+        className={`${DASHBOARD_CHART.heightClass} ${drillDown ? "cursor-pointer touch-manipulation" : ""}`}
+        aria-label={`Errors over time, ${totalErrors} total`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            margin={DASHBOARD_CHART.margin}
+            onClick={
+              drillDown
+                ? (state) => {
+                    const index = resolveClickedIndex(state);
+                    if (index == null) return;
+                    const point = chartData[index];
+                    if (point) navigateToErrorBucket(point.timestamp, point.value);
+                  }
+                : undefined
+            }
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke={DASHBOARD_CHART.grid} vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: DASHBOARD_CHART.axis }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              tickFormatter={(label, index) => formatAggregatedAxisTick(chartData, String(label), index)}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: DASHBOARD_CHART.axis }}
+              tickLine={false}
+              axisLine={false}
+              width={36}
+              allowDecimals={false}
+              tickFormatter={(v) => formatCompactNumber(Number(v))}
+            />
+            <Tooltip
+              cursor={DASHBOARD_CHART.tooltipCursor}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const point = payload[0]?.payload as (typeof chartData)[0];
+                return (
+                  <DashboardChartTooltip label={point.label}>
+                    <span className="text-destructive">
+                      {Math.round(point.value).toLocaleString()} errors
+                    </span>
+                  </DashboardChartTooltip>
+                );
+              }}
+            />
+            <Bar
+              dataKey="value"
+              activeBar={DASHBOARD_CHART.activeBarError}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={28}
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={entry.value > 0 ? "var(--dash-status-5xx)" : "transparent"}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-    </motion.div>
+      {totalErrors === 0 && (
+        <DashboardWindowNudge
+          subject="error activity"
+          timeRange={timeRange}
+          onExpandWindow={onExpandWindow}
+          className="mt-2"
+        />
+      )}
+    </DashboardPanel>
   );
 }
 
+export const ErrorsTimelineWidget = memo(ErrorsTimelineWidgetInner);
 export default ErrorsTimelineWidget;

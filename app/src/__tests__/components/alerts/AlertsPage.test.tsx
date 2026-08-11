@@ -12,9 +12,9 @@ import type { AlertTemplate, AlertCategory } from "@/types/alert";
 
 // Mock the category configuration
 const CATEGORY_CONFIG: Record<AlertCategory, { label: string; colorClass: string }> = {
-  availability: { label: "Availability", colorClass: "text-red-500" },
-  performance: { label: "Performance", colorClass: "text-amber-500" },
-  volume: { label: "Volume", colorClass: "text-blue-500" },
+  availability: { label: "Availability", colorClass: "text-destructive" },
+  performance: { label: "Performance", colorClass: "text-warning" },
+  volume: { label: "Volume", colorClass: "text-muted-foreground" },
 };
 
 // Simplified AlertTemplateCard for testing

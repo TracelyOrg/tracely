@@ -9,6 +9,6 @@ export type { StatusCodeData } from "./StatusCodeWidget";
 export { TopEndpointsWidget } from "./TopEndpointsWidget";
 export type { EndpointStats } from "./TopEndpointsWidget";
 export { LatencyDistributionWidget } from "./LatencyDistributionWidget";
-export type { LatencyBucket } from "./LatencyDistributionWidget";
 export { ErrorsTimelineWidget } from "./ErrorsTimelineWidget";
 export { MetricCard } from "./MetricCard";
+export { MetricSparklineCard } from "./MetricSparklineCard";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   X,
   Copy,
@@ -58,19 +58,19 @@ function CopyValue({ text }: { text: string }) {
 }
 
 function statusColor(code: number): string {
-  if (code >= 200 && code < 300) return "text-emerald-500";
-  if (code >= 400 && code < 500) return "text-amber-500";
-  if (code >= 500) return "text-red-500";
+  if (code >= 200 && code < 300) return "text-success";
+  if (code >= 400 && code < 500) return "text-warning";
+  if (code >= 500) return "text-destructive";
   return "text-muted-foreground";
 }
 
 function StatusIcon({ code }: { code: number }) {
   if (code >= 200 && code < 300)
-    return <CheckCircle className="size-4 text-emerald-500" aria-label="Status: healthy" role="img" />;
+    return <CheckCircle className="size-4 text-success" aria-label="Status: healthy" role="img" />;
   if (code >= 400 && code < 500)
-    return <AlertTriangle className="size-4 text-amber-500" aria-label="Status: warning" role="img" />;
+    return <AlertTriangle className="size-4 text-warning" aria-label="Status: warning" role="img" />;
   if (code >= 500)
-    return <XCircle className="size-4 text-red-500" aria-label="Status: error" role="img" />;
+    return <XCircle className="size-4 text-destructive" aria-label="Status: error" role="img" />;
   return null;
 }
 
@@ -225,7 +225,7 @@ function RequestTab({ detail }: { detail: SpanDetail }) {
     <div className="space-y-4 p-4">
       {/* Method + URL */}
       <div className="flex items-center gap-2">
-        <span className="rounded bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600">
+        <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
           {detail.http_method}
         </span>
         <span className="font-mono text-sm break-all">{fullUrl}</span>
@@ -384,10 +384,10 @@ function ResponseTab({ detail }: { detail: SpanDetail }) {
       {/* Exception / Error Details */}
       {(hasError || detail.status_message) && (
         <>
-          <div className="rounded border border-red-500/30 bg-red-500/5 p-3">
+          <div className="rounded border border-destructive/30 bg-destructive/5 p-3">
             <div className="flex items-center gap-2">
-              <XCircle className="size-4 text-red-500" />
-              <span className="text-sm font-medium text-red-600">
+              <XCircle className="size-4 text-destructive" />
+              <span className="text-sm font-medium text-destructive">
                 {detail.http_status_code >= 500
                   ? `HTTP ${detail.http_status_code} Server Error`
                   : "Error"}
@@ -466,6 +466,22 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
     : false;
 
   const [activeTab, setActiveTab] = useState<TabId>("response");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Roving-tabindex arrow key navigation (WAI-ARIA Tabs pattern)
+  function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
+    let nextIndex: number | null = null;
+    if (e.key === "ArrowRight") nextIndex = (index + 1) % TABS.length;
+    else if (e.key === "ArrowLeft") nextIndex = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") nextIndex = 0;
+    else if (e.key === "End") nextIndex = TABS.length - 1;
+
+    if (nextIndex !== null) {
+      e.preventDefault();
+      setActiveTab(TABS[nextIndex].id);
+      tabRefs.current[nextIndex]?.focus();
+    }
+  }
 
   // Build full URL with query params for display (strip method prefix if present in span_name)
   const fullUrl = useMemo(() => {
@@ -498,14 +514,14 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
       <div
         className={cn(
           "flex items-center justify-between border-b px-4 py-3",
-          isError && "border-red-500/30 bg-red-500/5"
+          isError && "border-destructive/30 bg-destructive/5"
         )}
       >
         <div className="min-w-0 flex-1">
           {detail ? (
             <>
               <div className="flex items-center gap-2">
-                <span className="rounded bg-blue-500/10 px-2 py-0.5 text-xs font-semibold text-blue-600">
+                <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
                   {detail.http_method}
                 </span>
                 <span className="truncate font-mono text-sm font-medium" title={fullUrl}>
@@ -563,13 +579,16 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
 
       {/* Tabs */}
       <div className="flex border-b" role="tablist" aria-label="Inspector tabs">
-        {TABS.map((tab) => (
+        {TABS.map((tab, i) => (
           <button
             key={tab.id}
+            ref={(el) => { tabRefs.current[i] = el; }}
             role="tab"
             aria-selected={activeTab === tab.id}
             aria-controls={`tabpanel-${tab.id}`}
+            tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(e) => handleTabKeyDown(e, i)}
             className={cn(
               "flex-1 px-3 py-2 text-xs font-medium transition-colors",
               activeTab === tab.id
@@ -579,7 +598,7 @@ export function SpanInspector({ detail, loading, error, onClose, orgSlug, projec
           >
             {tab.label}
             {tab.id === "response" && isError && (
-              <span className="ml-1 inline-flex size-1.5 rounded-full bg-red-500" />
+              <span className="ml-1 inline-flex size-1.5 rounded-full bg-destructive" />
             )}
           </button>
         ))}

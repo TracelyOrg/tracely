@@ -65,7 +65,7 @@ export default function OrgCard({
           userRole === "admin"
             ? "bg-primary/10 text-primary"
             : userRole === "member"
-              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              ? "bg-muted text-foreground"
               : "bg-muted text-muted-foreground"
         }`}
       >

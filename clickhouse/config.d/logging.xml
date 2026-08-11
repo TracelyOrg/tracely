@@ -1,0 +1,69 @@
+<clickhouse>
+    <logger>
+        <level>warning</level>
+    </logger>
+
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <text_log>
+        <database>system</database>
+        <table>text_log</table>
+        <level>warning</level>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </text_log>
+
+    <trace_log>
+        <database>system</database>
+        <table>trace_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </trace_log>
+
+    <metric_log>
+        <database>system</database>
+        <table>metric_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </metric_log>
+
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+
+    <processors_profile_log>
+        <database>system</database>
+        <table>processors_profile_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </processors_profile_log>
+
+    <query_views_log>
+        <database>system</database>
+        <table>query_views_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_views_log>
+
+    <query_metric_log>
+        <database>system</database>
+        <table>query_metric_log</table>
+        <ttl>event_date + INTERVAL 3 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_metric_log>
+
+    <asynchronous_metric_log>
+        <database>system</database>
+        <table>asynchronous_metric_log</table>
+        <ttl>event_date + INTERVAL 7 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </asynchronous_metric_log>
+</clickhouse>

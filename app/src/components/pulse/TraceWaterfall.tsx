@@ -47,21 +47,21 @@ function KindIcon({ kind }: { kind: string }) {
 /** Get the waterfall bar color based on status */
 function barColor(node: SpanTreeNode): string {
   if (node.span.status_code === "ERROR" || node.span.http_status_code >= 500) {
-    return "bg-red-500";
+    return "bg-destructive";
   }
   if (node.isBottleneck) {
-    return "bg-amber-500";
+    return "bg-warning";
   }
-  return "bg-blue-500";
+  return "bg-foreground/70";
 }
 
 /** Get duration badge style for slow/bottleneck spans */
 function durationBadgeClass(node: SpanTreeNode): string {
   if (node.isSlowest) {
-    return "bg-red-500/15 text-red-600 ring-1 ring-red-500/30";
+    return "bg-destructive/15 text-destructive ring-1 ring-destructive/30";
   }
   if (node.isBottleneck) {
-    return "bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/30";
+    return "bg-warning/15 text-warning ring-1 ring-warning/30";
   }
   return "text-muted-foreground";
 }
@@ -224,9 +224,9 @@ function LogEvents({ events, depth }: LogEventsProps) {
   if (events.length === 0) return null;
 
   const levelColor: Record<string, string> = {
-    error: "text-red-500",
-    warn: "text-amber-500",
-    info: "text-blue-500",
+    error: "text-destructive",
+    warn: "text-warning",
+    info: "text-foreground",
     debug: "text-muted-foreground",
   };
 

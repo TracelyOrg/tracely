@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import DashboardPageClient from "./DashboardPageContent";
-import { getProjectName } from "@/lib/metadata";
+import { getDashboardMetrics, getProject, getProjectName } from "@/lib/metadata";
 
 interface PageProps {
   params: Promise<{ orgSlug: string; projectSlug: string }>;
@@ -14,6 +14,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-export default function DashboardPage() {
-  return <DashboardPageClient />;
+export default async function DashboardPage({ params }: PageProps) {
+  const { orgSlug, projectSlug } = await params;
+
+  const [project, initialMetrics] = await Promise.all([
+    getProject(orgSlug, projectSlug),
+    getDashboardMetrics(orgSlug, projectSlug, { time: "15m" }),
+  ]);
+
+  return (
+    <DashboardPageClient
+      orgSlug={orgSlug}
+      projectSlug={projectSlug}
+      projectId={project?.id ?? null}
+      initialMetrics={project ? initialMetrics : null}
+    />
+  );
 }

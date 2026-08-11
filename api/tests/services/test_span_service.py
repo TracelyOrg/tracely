@@ -54,13 +54,12 @@ async def test_get_span_history_returns_spans(org_id, project_id):
         _make_ch_row(org_id, project_id, span_id="span-2"),
     ]
 
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = list(rows[0].keys())
     mock_result.result_rows = [list(r.values()) for r in rows]
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         result = await get_span_history(
             org_id=org_id,
             project_id=project_id,
@@ -75,15 +74,14 @@ async def test_get_span_history_returns_spans(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_with_before_cursor(org_id, project_id):
     """get_span_history passes 'before' cursor to ClickHouse query."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = list(_make_ch_row(org_id, project_id).keys())
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
     before = datetime(2026, 2, 3, 9, 0, 0, tzinfo=timezone.utc)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
@@ -92,7 +90,7 @@ async def test_get_span_history_with_before_cursor(org_id, project_id):
         )
 
     # Verify the query was called with parameters including the before cursor
-    call_args = mock_client.query.call_args
+    call_args = mock_ch_query.call_args
     query_str = call_args[0][0]
     assert "start_time <" in query_str
 
@@ -100,13 +98,12 @@ async def test_get_span_history_with_before_cursor(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_empty_result(org_id, project_id):
     """get_span_history returns empty list when no spans found."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         result = await get_span_history(
             org_id=org_id,
             project_id=project_id,
@@ -119,20 +116,19 @@ async def test_get_span_history_empty_result(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_respects_limit(org_id, project_id):
     """get_span_history passes the limit to the ClickHouse query."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             limit=25,
         )
 
-    call_args = mock_client.query.call_args
+    call_args = mock_ch_query.call_args
     query_str = call_args[0][0]
     assert "LIMIT 25" in query_str
 
@@ -140,20 +136,19 @@ async def test_get_span_history_respects_limit(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_scopes_by_org_and_project(org_id, project_id):
     """get_span_history always scopes query by org_id AND project_id (multi-tenant)."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             limit=50,
         )
 
-    call_args = mock_client.query.call_args
+    call_args = mock_ch_query.call_args
     query_str = call_args[0][0]
     params = call_args[1].get("parameters", call_args[0][1] if len(call_args[0]) > 1 else {})
     assert "org_id" in query_str
@@ -166,21 +161,20 @@ async def test_get_span_history_scopes_by_org_and_project(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_filters_by_service(org_id, project_id):
     """get_span_history adds service_name WHERE clause when service param is set."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             service="api-gateway",
         )
 
-    query_str = mock_client.query.call_args[0][0]
-    params = mock_client.query.call_args[1]["parameters"]
+    query_str = mock_ch_query.call_args[0][0]
+    params = mock_ch_query.call_args[1]["parameters"]
     assert "service_name = %(service)s" in query_str
     assert params["service"] == "api-gateway"
 
@@ -188,20 +182,19 @@ async def test_get_span_history_filters_by_service(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_filters_by_status_groups(org_id, project_id):
     """get_span_history adds status code range WHERE clause for status groups."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             status_groups=["4xx", "5xx"],
         )
 
-    query_str = mock_client.query.call_args[0][0]
+    query_str = mock_ch_query.call_args[0][0]
     assert "http_status_code >= 400" in query_str
     assert "http_status_code >= 500" in query_str
 
@@ -209,57 +202,61 @@ async def test_get_span_history_filters_by_status_groups(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_history_filters_by_endpoint_search(org_id, project_id):
     """get_span_history adds positionCaseInsensitive WHERE clause for endpoint search."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             endpoint_search="/api/users",
         )
 
-    query_str = mock_client.query.call_args[0][0]
-    params = mock_client.query.call_args[1]["parameters"]
+    query_str = mock_ch_query.call_args[0][0]
+    params = mock_ch_query.call_args[1]["parameters"]
     assert "positionCaseInsensitive" in query_str
     assert params["endpoint_search"] == "/api/users"
+    # Search must fall back to span_name when http_route is empty (matches
+    # the Live page display/client-filter behavior), not just raw http_route.
+    assert "span_name" in query_str
+    # Search must also match on HTTP method (e.g. "POST"), and normalize a
+    # missing leading slash on the route before comparing.
+    assert "http_method" in query_str
+    assert "startsWith" in query_str
 
 
 @pytest.mark.asyncio
 async def test_get_span_history_filters_by_after_time(org_id, project_id):
     """get_span_history adds start_time >= WHERE clause for after param."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
     after = datetime(2026, 2, 3, 8, 0, 0, tzinfo=timezone.utc)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
             after=after,
         )
 
-    query_str = mock_client.query.call_args[0][0]
+    query_str = mock_ch_query.call_args[0][0]
     assert "start_time >=" in query_str
 
 
 @pytest.mark.asyncio
 async def test_get_span_history_combined_filters_include_multi_tenant(org_id, project_id):
     """Combined filters still enforce org_id and project_id scoping."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
@@ -268,7 +265,7 @@ async def test_get_span_history_combined_filters_include_multi_tenant(org_id, pr
             endpoint_search="/health",
         )
 
-    query_str = mock_client.query.call_args[0][0]
+    query_str = mock_ch_query.call_args[0][0]
     assert "org_id" in query_str
     assert "project_id" in query_str
     assert "service_name" in query_str
@@ -279,19 +276,18 @@ async def test_get_span_history_combined_filters_include_multi_tenant(org_id, pr
 @pytest.mark.asyncio
 async def test_get_span_history_no_filters_omits_filter_clauses(org_id, project_id):
     """Without filter params, query has only base WHERE clauses."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = []
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_history(
             org_id=org_id,
             project_id=project_id,
         )
 
-    query_str = mock_client.query.call_args[0][0]
+    query_str = mock_ch_query.call_args[0][0]
     assert "service_name = %(service)s" not in query_str
     assert "positionCaseInsensitive" not in query_str
     assert "http_status_code >=" not in query_str
@@ -341,13 +337,12 @@ async def test_get_span_by_id_returns_span_detail(org_id, project_id):
     """get_span_by_id returns a SpanDetail when span exists."""
     row = _make_detail_row(org_id, project_id)
 
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = list(row.keys())
     mock_result.result_rows = [list(row.values())]
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         result = await get_span_by_id(
             org_id=org_id,
             project_id=project_id,
@@ -366,12 +361,11 @@ async def test_get_span_by_id_returns_span_detail(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_by_id_returns_none_when_not_found(org_id, project_id):
     """get_span_by_id returns None when span doesn't exist."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         result = await get_span_by_id(
             org_id=org_id,
             project_id=project_id,
@@ -384,19 +378,18 @@ async def test_get_span_by_id_returns_none_when_not_found(org_id, project_id):
 @pytest.mark.asyncio
 async def test_get_span_by_id_scopes_by_org_and_project(org_id, project_id):
     """get_span_by_id query includes org_id and project_id for multi-tenant isolation."""
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.result_rows = []
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         await get_span_by_id(
             org_id=org_id,
             project_id=project_id,
             span_id="span-1",
         )
 
-    query_str = mock_client.query.call_args[0][0]
+    query_str = mock_ch_query.call_args[0][0]
     assert "org_id" in query_str
     assert "project_id" in query_str
     assert "span_id" in query_str
@@ -411,13 +404,12 @@ async def test_get_span_by_id_parses_malformed_headers(org_id, project_id):
         response_headers="",
     )
 
-    mock_client = MagicMock()
     mock_result = MagicMock()
     mock_result.column_names = list(row.keys())
     mock_result.result_rows = [list(row.values())]
-    mock_client.query.return_value = mock_result
+    mock_ch_query = AsyncMock(return_value=mock_result)
 
-    with patch("app.services.span_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.span_service.ch_query", mock_ch_query):
         result = await get_span_by_id(
             org_id=org_id,
             project_id=project_id,

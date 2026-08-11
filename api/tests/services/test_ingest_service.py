@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
@@ -71,15 +71,14 @@ async def test_ingest_traces_inserts_into_clickhouse():
     project_id = uuid.uuid4()
     payload = _build_valid_payload()
 
-    mock_client = MagicMock()
-    mock_client.insert = MagicMock()
+    mock_ch_insert = AsyncMock()
 
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         count = await ingest_traces(payload, org_id, project_id)
 
     assert count == 1
-    mock_client.insert.assert_called_once()
-    call_args = mock_client.insert.call_args
+    mock_ch_insert.assert_called_once()
+    call_args = mock_ch_insert.call_args
     assert call_args[0][0] == "spans"  # table name
     assert call_args[1]["column_names"] == SPANS_COLUMNS
 
@@ -125,9 +124,9 @@ async def test_ingest_traces_returns_span_count():
         ]
     )
     payload = req.SerializeToString()
-    mock_client = MagicMock()
+    mock_ch_insert = AsyncMock()
 
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         count = await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
 
     assert count == 2
@@ -139,12 +138,12 @@ async def test_ingest_traces_empty_payload():
     req = ExportTraceServiceRequest()
     payload = req.SerializeToString()
 
-    mock_client = MagicMock()
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    mock_ch_insert = AsyncMock()
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         count = await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
 
     assert count == 0
-    mock_client.insert.assert_not_called()
+    mock_ch_insert.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -159,11 +158,11 @@ async def test_ingest_traces_row_size_bytes():
     """row_size_bytes reflects payload size."""
     payload = _build_valid_payload()
 
-    mock_client = MagicMock()
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    mock_ch_insert = AsyncMock()
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
 
-    rows = mock_client.insert.call_args[0][1]
+    rows = mock_ch_insert.call_args[0][1]
     # row_size_bytes is the last column
     row_size_idx = SPANS_COLUMNS.index("row_size_bytes")
     assert rows[0][row_size_idx] == len(payload)
@@ -173,12 +172,12 @@ async def test_ingest_traces_row_size_bytes():
 async def test_ingest_traces_column_ordering():
     """Inserted rows follow SPANS_COLUMNS order."""
     payload = _build_valid_payload()
-    mock_client = MagicMock()
+    mock_ch_insert = AsyncMock()
 
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
 
-    call_args = mock_client.insert.call_args
+    call_args = mock_ch_insert.call_args
     assert call_args[1]["column_names"] == SPANS_COLUMNS
     row = call_args[0][1][0]
     assert len(row) == len(SPANS_COLUMNS)
@@ -204,8 +203,8 @@ async def test_ingest_traces_broadcasts_to_sse_clients():
     # Connect an SSE client
     queue = connection_manager.connect(project_id)
 
-    mock_client = MagicMock()
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    mock_ch_insert = AsyncMock()
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         await ingest_traces(payload, org_id, project_id)
 
     # Queue should have received a span event
@@ -226,8 +225,8 @@ async def test_ingest_traces_broadcast_event_format():
 
     queue = connection_manager.connect(project_id)
 
-    mock_client = MagicMock()
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    mock_ch_insert = AsyncMock()
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         await ingest_traces(payload, org_id, project_id)
 
     event = queue.get_nowait()
@@ -279,8 +278,8 @@ async def test_ingest_traces_broadcasts_multiple_spans():
     project_id = uuid.uuid4()
     queue = connection_manager.connect(project_id)
 
-    mock_client = MagicMock()
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    mock_ch_insert = AsyncMock()
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         await ingest_traces(payload, uuid.uuid4(), project_id)
 
     assert queue.qsize() == 2
@@ -290,9 +289,9 @@ async def test_ingest_traces_broadcasts_multiple_spans():
 async def test_ingest_traces_no_broadcast_without_listeners():
     """Broadcast with no SSE clients does not error."""
     payload = _build_valid_payload()
-    mock_client = MagicMock()
+    mock_ch_insert = AsyncMock()
 
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         count = await ingest_traces(payload, uuid.uuid4(), uuid.uuid4())
 
     assert count == 1  # Ingestion still succeeds
@@ -309,11 +308,11 @@ async def test_ingest_traces_broadcast_does_not_block_on_failure():
         queue.put_nowait({"event": "filler", "data": f"{i}"})
 
     payload = _build_valid_payload()
-    mock_client = MagicMock()
+    mock_ch_insert = AsyncMock()
 
-    with patch("app.services.ingest_service.get_clickhouse_client", return_value=mock_client):
+    with patch("app.services.ingest_service.ch_insert", mock_ch_insert):
         count = await ingest_traces(payload, uuid.uuid4(), project_id)
 
     # Ingestion still returns normally
     assert count == 1
-    mock_client.insert.assert_called_once()
+    mock_ch_insert.assert_called_once()

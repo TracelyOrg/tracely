@@ -21,6 +21,7 @@ export interface EndpointStats {
   method: string;
   count: number;
   avg_latency: number;
+  p95_latency: number;
   error_rate: number;
 }
 
@@ -35,6 +36,13 @@ export interface LiveDashboardResponse {
   error_rate: number;
   p95_latency: number;
   services: ServiceStatus[];
+}
+
+export interface PeriodSummary {
+  total_requests: number;
+  total_errors: number;
+  error_rate: number;
+  p95_latency: number;
 }
 
 export interface DashboardMetricsResponse {
@@ -58,4 +66,10 @@ export interface DashboardMetricsResponse {
 
   // Service health
   services: ServiceStatus[];
+
+  /** Aggregates for the immediately preceding window of equal duration. */
+  previous_period?: PeriodSummary | null;
+
+  /** Distinct environments seen in the last 7 days. */
+  available_environments?: string[];
 }

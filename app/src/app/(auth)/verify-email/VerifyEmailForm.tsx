@@ -87,7 +87,7 @@ function VerifyEmailContent() {
         </p>
 
         {message && (
-          <div className="rounded-md bg-green-500/10 p-3 text-sm text-green-600 dark:text-green-400">
+          <div className="rounded-md bg-success/10 p-3 text-sm text-success">
             {message}
           </div>
         )}

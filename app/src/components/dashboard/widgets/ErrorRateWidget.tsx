@@ -12,15 +12,15 @@ interface ErrorRateWidgetProps {
 }
 
 function getStatusColor(rate: number): string {
-  if (rate >= 5) return "text-red-500";
-  if (rate >= 1) return "text-amber-500";
-  return "text-emerald-500";
+  if (rate >= 5) return "text-destructive";
+  if (rate >= 1) return "text-warning";
+  return "text-success";
 }
 
 function getStatusBgColor(rate: number): string {
-  if (rate >= 5) return "bg-red-500/10";
-  if (rate >= 1) return "bg-amber-500/10";
-  return "bg-emerald-500/10";
+  if (rate >= 5) return "bg-destructive/10";
+  if (rate >= 1) return "bg-warning/10";
+  return "bg-success/10";
 }
 
 function getStatusLabel(rate: number): string {
@@ -74,7 +74,7 @@ export function ErrorRateWidget({ errorRate, className }: ErrorRateWidgetProps) 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="absolute inset-0 bg-red-500/10 pointer-events-none"
+            className="absolute inset-0 bg-destructive/10 pointer-events-none"
             data-testid="error-rate-flash"
           />
         )}
@@ -110,7 +110,7 @@ export function ErrorRateWidget({ errorRate, className }: ErrorRateWidgetProps) 
           {errorRate.toFixed(2)}%
         </span>
         {isIncreasing && (
-          <span className="ml-2 text-sm text-red-500">↑</span>
+          <span className="ml-2 text-sm text-destructive">↑</span>
         )}
       </motion.div>
 
@@ -120,7 +120,7 @@ export function ErrorRateWidget({ errorRate, className }: ErrorRateWidgetProps) 
           <motion.div
             className={cn(
               "h-full rounded-full",
-              errorRate >= 5 ? "bg-red-500" : errorRate >= 1 ? "bg-amber-500" : "bg-emerald-500"
+              errorRate >= 5 ? "bg-destructive" : errorRate >= 1 ? "bg-warning" : "bg-success"
             )}
             initial={{ width: 0 }}
             animate={{ width: `${gaugePercent}%` }}

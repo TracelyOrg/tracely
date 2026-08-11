@@ -17,15 +17,15 @@ function formatLatency(ms: number): string {
 }
 
 function getStatusColor(latency: number): string {
-  if (latency >= 2000) return "text-red-500";
-  if (latency >= 500) return "text-amber-500";
-  return "text-emerald-500";
+  if (latency >= 2000) return "text-destructive";
+  if (latency >= 500) return "text-warning";
+  return "text-success";
 }
 
 function getStatusBgColor(latency: number): string {
-  if (latency >= 2000) return "bg-red-500/10";
-  if (latency >= 500) return "bg-amber-500/10";
-  return "bg-emerald-500/10";
+  if (latency >= 2000) return "bg-destructive/10";
+  if (latency >= 500) return "bg-warning/10";
+  return "bg-success/10";
 }
 
 function getStatusLabel(latency: number): string {
@@ -85,7 +85,7 @@ export function LatencyWidget({ p95Latency, className }: LatencyWidgetProps) {
         {(isIncreasing || isDecreasing) && (
           <span className={cn(
             "ml-2 text-sm",
-            isIncreasing ? "text-red-500" : "text-emerald-500"
+            isIncreasing ? "text-destructive" : "text-success"
           )}>
             {isIncreasing ? "↑" : "↓"}
           </span>
@@ -98,7 +98,7 @@ export function LatencyWidget({ p95Latency, className }: LatencyWidgetProps) {
           <motion.div
             className={cn(
               "h-full rounded-full",
-              p95Latency >= 2000 ? "bg-red-500" : p95Latency >= 500 ? "bg-amber-500" : "bg-emerald-500"
+              p95Latency >= 2000 ? "bg-destructive" : p95Latency >= 500 ? "bg-warning" : "bg-success"
             )}
             initial={{ width: 0 }}
             animate={{ width: `${gaugePercent}%` }}

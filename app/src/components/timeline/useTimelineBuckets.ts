@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useDeferredValue } from "react";
 import { useLiveStreamStore } from "@/stores/liveStreamStore";
 import { useFilterStore } from "@/stores/filterStore";
 import {
@@ -30,10 +30,10 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const isLivePreset = timeRange.preset !== "custom";
 
-  // Update current time periodically for live presets
+  // Update current time periodically for live presets (2s — bucket data is deferred)
   useEffect(() => {
     if (!isLivePreset) return;
-    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
+    const interval = setInterval(() => setCurrentTime(Date.now()), 2000);
     return () => clearInterval(interval);
   }, [isLivePreset]);
 
@@ -45,6 +45,9 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
     }
     return result;
   }, [spans, childrenMap]);
+
+  // Defer heavy bucket recompute during live span bursts
+  const deferredSpans = useDeferredValue(allSpans);
 
   // Compute time range bounds
   const { rangeStart, rangeEnd, isLive } = useMemo(() => {
@@ -70,10 +73,10 @@ export function useTimelineBuckets(): UseTimelineBucketsResult {
     return getGranularity(rangeMs);
   }, [rangeStart, rangeEnd]);
 
-  // Compute buckets
+  // Compute buckets from deferred span snapshot
   const buckets = useMemo(() => {
-    return computeBuckets(allSpans, rangeStart, rangeEnd, granularity);
-  }, [allSpans, rangeStart, rangeEnd, granularity]);
+    return computeBuckets(deferredSpans, rangeStart, rangeEnd, granularity);
+  }, [deferredSpans, rangeStart, rangeEnd, granularity]);
 
   return {
     buckets,

@@ -115,7 +115,7 @@ function StepperNav({ currentStep }: { currentStep: number }) {
             {i > 0 && (
               <div
                 className={`h-px w-8 transition-colors ${
-                  isCompleted ? "bg-emerald-500" : "bg-border"
+                  isCompleted ? "bg-success" : "bg-border"
                 }`}
               />
             )}
@@ -123,7 +123,7 @@ function StepperNav({ currentStep }: { currentStep: number }) {
               <div
                 className={`flex size-8 items-center justify-center rounded-full text-sm font-medium transition-colors ${
                   isCompleted
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-success text-white"
                     : isActive
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground"

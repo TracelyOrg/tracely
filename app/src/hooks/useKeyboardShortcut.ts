@@ -8,6 +8,10 @@ function isEditableElement(el: Element | null): boolean {
   if (!el) return false;
   if (INPUT_TAG_NAMES.has(el.tagName)) return true;
   if (el.getAttribute("contenteditable") === "true") return true;
+  // Focus inside an open popover (e.g. the date range calendar) — its own
+  // buttons/day cells aren't <input>/<textarea>, but list shortcuts like
+  // j/k/arrows/Enter must not also fire in the background while it's open.
+  if (el.closest('[data-slot="popover-content"]')) return true;
   return false;
 }
 

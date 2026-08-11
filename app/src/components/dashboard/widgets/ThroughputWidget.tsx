@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { memo, useMemo } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -11,83 +11,112 @@ import {
   CartesianGrid,
 } from "recharts";
 import type { DataPoint } from "@/types/dashboard";
+import type { TimeRange } from "@/types/span";
+import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
+import { DashboardChartTooltip } from "@/components/dashboard/charts/DashboardChartTooltip";
+import { DASHBOARD_CHART, formatAggregatedAxisTick } from "@/lib/dashboardChartTheme";
+import {
+  aggregateTimeSeries,
+  computeThroughputStats,
+  formatCompactNumber,
+  getBucketMsForTimeRange,
+} from "@/lib/dashboardChartAggregation";
+import { DASHBOARD_METRIC_HELP } from "@/lib/dashboardMetricHelp";
 
 interface ThroughputWidgetProps {
   data: DataPoint[];
+  timeRange: TimeRange;
   className?: string;
 }
 
-/**
- * Throughput bar chart showing requests per minute over time.
- * Displays data as vertical bars for easy volume comparison.
- */
-export function ThroughputWidget({ data, className }: ThroughputWidgetProps) {
-  const chartData = data.map((point) => ({
-    time: new Date(point.timestamp).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-    value: point.value,
-  }));
+function timeRangeKey(timeRange: TimeRange): string {
+  return `${timeRange.preset}|${timeRange.start ?? ""}|${timeRange.end ?? ""}`;
+}
 
-  // Calculate total requests
-  const totalRequests = data.reduce((sum, d) => sum + d.value, 0);
+function ThroughputWidgetInner({ data, timeRange, className }: ThroughputWidgetProps) {
+  const stats = useMemo(() => computeThroughputStats(data), [data]);
+  const rangeKey = timeRangeKey(timeRange);
+
+  const chartData = useMemo(() => {
+    const bucketMs = getBucketMsForTimeRange(timeRange);
+    return aggregateTimeSeries(data, bucketMs, "avg");
+  }, [data, rangeKey, timeRange]);
 
   return (
-    <motion.div
-      data-testid="throughput-widget"
+    <DashboardPanel
+      title="Throughput"
+      description={DASHBOARD_METRIC_HELP.throughput}
+      testId="throughput-widget"
       className={className}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-    >
-      <div className="rounded-xl border bg-card p-4 h-full">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-muted-foreground">Throughput</h3>
-          <span className="text-2xl font-bold tabular-nums">
-            {totalRequests.toLocaleString()}
+      action={
+        <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5 text-xs tabular-nums text-muted-foreground">
+          <span>
+            avg {formatCompactNumber(stats.avg)}
+            <span className="ml-1">/min</span>
           </span>
-        </div>
-        <p className="text-xs text-muted-foreground mb-4">Total requests in period</p>
-
-        <div className="h-[140px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                tickLine={false}
-                axisLine={false}
-                width={40}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                }}
-                formatter={(value) => [`${Number(value).toLocaleString()} req`, "Requests"]}
-              />
-              <Bar
-                dataKey="value"
-                fill="hsl(var(--primary))"
-                radius={[4, 4, 0, 0]}
-                maxBarSize={24}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+          <span className="hidden text-border sm:inline" aria-hidden>
+            ·
+          </span>
+          <span className="hidden sm:inline">
+            peak {formatCompactNumber(stats.peak)}
+            <span className="ml-1">/min</span>
+          </span>
+        </span>
+      }
+    >
+      <div
+        className={DASHBOARD_CHART.heightClass}
+        aria-label={`Throughput chart, average ${Math.round(stats.avg)} per minute, peak ${Math.round(stats.peak)}`}
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={DASHBOARD_CHART.margin}>
+            <CartesianGrid strokeDasharray="3 3" stroke={DASHBOARD_CHART.grid} vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 10, fill: DASHBOARD_CHART.axis }}
+              tickLine={false}
+              axisLine={false}
+              interval={0}
+              tickFormatter={(label, index) => formatAggregatedAxisTick(chartData, String(label), index)}
+            />
+            <YAxis
+              tick={{ fontSize: 10, fill: DASHBOARD_CHART.axis }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+              tickFormatter={(v) => formatCompactNumber(Number(v))}
+              allowDecimals={false}
+            />
+            <Tooltip
+              cursor={DASHBOARD_CHART.tooltipCursor}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const point = payload[0]?.payload as (typeof chartData)[0];
+                return (
+                  <DashboardChartTooltip label={point.label}>
+                    <p>{Math.round(point.value).toLocaleString()} req/min avg</p>
+                    {point.peakInBucket != null && point.peakInBucket !== point.value && (
+                      <p className="mt-0.5 font-normal text-muted-foreground">
+                        peak {Math.round(point.peakInBucket).toLocaleString()} req/min
+                      </p>
+                    )}
+                  </DashboardChartTooltip>
+                );
+              }}
+            />
+            <Bar
+              dataKey="value"
+              fill={DASHBOARD_CHART.bar}
+              activeBar={DASHBOARD_CHART.activeBar}
+              radius={[2, 2, 0, 0]}
+              maxBarSize={28}
+            />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
-    </motion.div>
+    </DashboardPanel>
   );
 }
 
+export const ThroughputWidget = memo(ThroughputWidgetInner);
 export default ThroughputWidget;

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime
 
-from app.db.clickhouse import get_clickhouse_client
+from app.db.clickhouse import ch_query
 from app.schemas.span import SpanDetail, build_span_detail
 from app.schemas.stream import SpanSummary, TraceSpan
+from app.services.dashboard_service import _RAW_HTTP_METHOD_SQL, _RESOLVED_HTTP_ROUTE_SQL
 
 # Columns to select for span history (matches SpanSummary fields)
 _HISTORY_COLUMNS = [
@@ -53,10 +53,14 @@ async def get_span_history(
         limit: Max rows to return.
         service: Filter by service_name (exact match).
         status_groups: Filter by HTTP status code groups (e.g. ["4xx", "5xx"]).
-        endpoint_search: Filter by http_route substring (case-insensitive).
+        endpoint_search: Case-insensitive substring search against
+            "METHOD /route", matching what StreamRow displays. Falls back to
+            span_name when http_route is empty (same resolution as
+            dashboard_service's top-endpoints query), and normalizes a
+            missing leading slash before comparing — some instrumentation
+            stores routes without one, which otherwise makes an exact route
+            search fail even though a broader substring search finds it.
     """
-    client = get_clickhouse_client()
-
     where_clauses = [
         "org_id = %(org_id)s",
         "project_id = %(project_id)s",
@@ -69,11 +73,11 @@ async def get_span_history(
 
     if before is not None:
         where_clauses.append("start_time < %(before)s")
-        params["before"] = before.isoformat()
+        params["before"] = before
 
     if after is not None:
         where_clauses.append("start_time >= %(after)s")
-        params["after"] = after.isoformat()
+        params["after"] = after
 
     if service is not None:
         where_clauses.append("service_name = %(service)s")
@@ -95,7 +99,24 @@ async def get_span_history(
             where_clauses.append(f"({' OR '.join(range_conditions)})")
 
     if endpoint_search:
-        where_clauses.append("positionCaseInsensitive(http_route, %(endpoint_search)s) > 0")
+        # "METHOD /route" — mirrors StreamRow's display exactly, and always
+        # has a leading slash regardless of whether the stored route does
+        # (some instrumentation omits it; _normalize_http_route papers over
+        # the same gap for the top-endpoints widget).
+        searchable_sql = f"""
+        concat(
+            ({_RAW_HTTP_METHOD_SQL}),
+            ' ',
+            multiIf(
+                startsWith(({_RESOLVED_HTTP_ROUTE_SQL}), '/'), ({_RESOLVED_HTTP_ROUTE_SQL}),
+                ({_RESOLVED_HTTP_ROUTE_SQL}) = '', '/',
+                concat('/', ({_RESOLVED_HTTP_ROUTE_SQL}))
+            )
+        )
+        """
+        where_clauses.append(
+            f"positionCaseInsensitive(({searchable_sql}), %(endpoint_search)s) > 0"
+        )
         params["endpoint_search"] = endpoint_search
 
     where_sql = " AND ".join(where_clauses)
@@ -107,9 +128,7 @@ async def get_span_history(
         f" LIMIT {limit}"
     )
 
-    result = await asyncio.to_thread(
-        client.query, query, parameters=params
-    )
+    result = await ch_query(query, parameters=params)
 
     if not result.result_rows:
         return []
@@ -171,8 +190,6 @@ async def get_span_by_id(
     Returns None if the span is not found or not accessible within the
     given org/project scope.
     """
-    client = get_clickhouse_client()
-
     query = (
         f"SELECT {_DETAIL_COLUMNS_SQL} FROM spans"
         " WHERE org_id = %(org_id)s"
@@ -182,8 +199,7 @@ async def get_span_by_id(
         " LIMIT 1"
     )
 
-    result = await asyncio.to_thread(
-        client.query,
+    result = await ch_query(
         query,
         parameters={
             "org_id": str(org_id),
@@ -218,8 +234,6 @@ async def get_trace_spans(
     Includes attributes (for span events / log events).
     Only returns span_type='span' (excludes pending_span).
     """
-    client = get_clickhouse_client()
-
     query = (
         f"SELECT {_TRACE_COLUMNS_SQL} FROM spans"
         " WHERE org_id = %(org_id)s"
@@ -230,8 +244,7 @@ async def get_trace_spans(
         " LIMIT 500"
     )
 
-    result = await asyncio.to_thread(
-        client.query,
+    result = await ch_query(
         query,
         parameters={
             "org_id": str(org_id),

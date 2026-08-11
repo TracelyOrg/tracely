@@ -42,3 +42,7 @@ htmlcov/
 
 # Build
 *.log
+.agents
+.claude
+skills-lock.json
+ISSUES_FEATURES_PLAN.md
